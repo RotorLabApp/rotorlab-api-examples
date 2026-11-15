@@ -1,0 +1,5443 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "RotorLab API",
+    "version": "3.5.7",
+    "description": "Key-authenticated HTTP API for a RotorLab organization: the performance engine (multirotors, fixed-wing aircraft and VTOL, radio link budgets, center of gravity), your saved builds, flight log forensics, and the organization's operational records (flights, checklists, missions, aircraft, pilots, work orders, components, types, service bulletins, health). This document is served by each instance with that instance's address in `servers` and its release in `info.version`.\n\nKeys: create named keys under Organization, Integrations, API keys. Each key carries the areas it may reach and is read only or read and write; an organization's ground stations use device credentials, which reach the status, flights and checklists areas. Every operation names the area it needs in `x-area`.\n\nMetering: every operation says in `x-metered` whether it spends a unit. A unit comes from the plan's daily quota first (it resets at 00:00 UTC), then from the organization's credit balance. Unmetered: version, usage, flights, checklists, missions, pilots, sorties, aircraft, workorders, components, types, bulletins, health, ml/scores, and asking after a queued crash reading. A refused call spends nothing: its body is checked whole before anything is metered, and a call refused after that (any 4xx) gives its unit back. An unknown path is answered 404 before anything is metered.\n\nRefusals are JSON with an `error` sentence and, where it helps a program branch, a field: 400 a value the call cannot read, a field the call does not take, or a whole number out of its range, naming the field; 401 no key or a bad one; 402 an add-on the account lacks, or a plan that includes no API calls (`quota: none`, no Retry-After: add credits or a plan that includes calls); 403 the key lacks the area (`area`), the key is read only (`read_only: true`), the holder's role does not reach it, two-factor or single sign-on is outstanding (`mfa_setup_required`, `sso`), or the plan has ended; 404 not found, or an unknown path; 405 a method the path does not take, with an `Allow` header; 409 a conflict the error names; 410 a reading that has expired; 413 a body over the limit; 429 the daily quota and credits are spent (`quota: exhausted`, Retry-After in seconds to the reset) or five logs are already waiting (`waiting`, Retry-After 30); 503 a log not read in time, with its `token` and `status_url`.\n\nThe MCP endpoint for AI assistants is POST /mcp on the same instance, with the same keys; see /developers.",
+    "contact": {
+      "name": "RotorLab",
+      "url": "https://rotorlab.app"
+    },
+    "license": {
+      "name": "Proprietary"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://app.rotorlab.app/api/v1",
+      "description": "This RotorLab instance"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Meta",
+      "description": "Your key, quota and the API's version. Free."
+    },
+    {
+      "name": "Physics",
+      "description": "Performance analysis and reference data. Metered."
+    },
+    {
+      "name": "Builds",
+      "description": "Your saved build library. Metered."
+    },
+    {
+      "name": "Forensics",
+      "description": "Post-incident log analysis (Crash Analyzer add-on). Metered on upload."
+    },
+    {
+      "name": "Records",
+      "description": "Flights, checklists, pilots and aircraft: what a ground station files and reads. Free."
+    },
+    {
+      "name": "Missions",
+      "description": "Mission records and flyable plans (Mission Planning add-on). Free."
+    },
+    {
+      "name": "Operations",
+      "description": "Maintenance, types, service bulletins and health. Free."
+    },
+    {
+      "name": "Scores",
+      "description": "Advisory model scores on the organization's records. Free."
+    }
+  ],
+  "paths": {
+    "/version": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "summary": "API name, version, author",
+        "operationId": "getVersion",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Version"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "x-metered": false,
+        "x-area": "status",
+        "description": "Free. The release this instance runs."
+      }
+    },
+    "/usage": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "summary": "Your quota, credits, and the key making this call",
+        "operationId": "getUsage",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Usage"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "x-metered": false,
+        "x-area": "status",
+        "description": "Free, and open even when the plan has ended, so a refused client can read its own status. `key` describes the key that made this call: its id, name, areas, whether it is read only, and when it ends."
+      }
+    },
+    "/airframes": {
+      "get": {
+        "tags": [
+          "Physics"
+        ],
+        "summary": "Supported airframe types and their defaults",
+        "operationId": "getAirframes",
+        "responses": {
+          "200": {
+            "description": "Every airframe type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Airframes"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "engine"
+      }
+    },
+    "/catalog": {
+      "get": {
+        "tags": [
+          "Physics"
+        ],
+        "summary": "Payload parts catalog (controllers, computers, sensors, radios)",
+        "operationId": "getCatalog",
+        "responses": {
+          "200": {
+            "description": "The payload parts catalog",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Catalog"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "engine"
+      }
+    },
+    "/analyze": {
+      "post": {
+        "tags": [
+          "Physics"
+        ],
+        "summary": "Analyze a build and return full performance results",
+        "operationId": "analyzeBuild",
+        "description": "Send a build-parameters object. Fields you leave out take the example profile's defaults. A field you send must be readable: a number field that is not a number, an `airframe_type` or `frame_type` the engine does not have (GET /airframes lists them), a true-or-false field holding anything else, or a list field holding a non-list is answered 400 naming the field. Numbers sent as text (\"7\") are read. Returns headline outputs, chart SVGs, and limit checks.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildParams"
+              },
+              "example": {
+                "airframe_type": "Quad X",
+                "motor_count": 4,
+                "prop_diameter_in": 7,
+                "prop_pitch_in": 4,
+                "motor_kv": 1700
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyzeResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "engine"
+      }
+    },
+    "/rf": {
+      "post": {
+        "tags": [
+          "Physics"
+        ],
+        "summary": "Radio link budget and range",
+        "operationId": "linkBudget",
+        "description": "Resolve one radio link, or several at once. Post a single link's parameters to get `{ link: {...} }`, or wrap them as `{ links: { control: {...}, video: {...} } }` to resolve each and get `{ links: {...} }`. Pure physics: no build or account data is read. Fields you leave out take their defaults; a field you send must be a number (400 naming the field otherwise), and `freq_mhz` must be positive.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RfLink"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "links"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "links": {
+                        "type": "object",
+                        "maxProperties": 16,
+                        "additionalProperties": {
+                          "$ref": "#/components/schemas/RfLink"
+                        },
+                        "description": "Named links, each an object of one link's fields. A value that is not an object (a string, a list) is refused with 400 naming `links`, and nothing else goes beside it."
+                      }
+                    }
+                  }
+                ]
+              },
+              "example": {
+                "links": {
+                  "control": {
+                    "freq_mhz": 915,
+                    "tx_power_mw": 250,
+                    "tx_gain_dbi": 2,
+                    "rx_gain_dbi": 2,
+                    "rx_sens_dbm": -108,
+                    "tx_height_m": 2,
+                    "rx_height_m": 100
+                  },
+                  "video": {
+                    "freq_mhz": 5800,
+                    "tx_power_mw": 1000,
+                    "tx_gain_dbi": 2,
+                    "rx_gain_dbi": 13,
+                    "rx_sens_dbm": -90,
+                    "tx_height_m": 100,
+                    "rx_height_m": 2
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Link budget(s)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "link": {
+                      "$ref": "#/components/schemas/LinkBudget"
+                    },
+                    "links": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "$ref": "#/components/schemas/LinkBudget"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "engine"
+      }
+    },
+    "/cg": {
+      "post": {
+        "tags": [
+          "Physics"
+        ],
+        "summary": "Center of gravity and balance for a build",
+        "operationId": "centerOfGravity",
+        "description": "Send a build-parameters object (same shape and the same checks as `/analyze`). Returns the resolved center of gravity, the balance datum, per-item placements, and, for a winged build, the balance point as a percentage of mean aerodynamic chord.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BuildParams"
+              },
+              "example": {
+                "airframe_type": "Quadplane (lift + pusher)",
+                "wing_span_mm": 1800,
+                "body_length_mm": 1000
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Balance result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "cg": {
+                      "$ref": "#/components/schemas/CgResult"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "engine"
+      }
+    },
+    "/builds": {
+      "get": {
+        "tags": [
+          "Builds"
+        ],
+        "summary": "List your saved builds",
+        "operationId": "listBuilds",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "builds": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BuildSummary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "builds"
+      },
+      "post": {
+        "tags": [
+          "Builds"
+        ],
+        "summary": "Create or overwrite a build by name",
+        "operationId": "saveBuild",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "name",
+                  "params"
+                ],
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "params": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "description": "The build's parameters: the fields of BuildParams, their values checked as /analyze checks them. A field the engine does not have is not refused here, so a build read back from an older release can be saved again, but it is not saved. /analyze and /cg refuse such a field, so leave it out when sending them."
+                  },
+                  "notes": {
+                    "type": "string"
+                  }
+                }
+              },
+              "example": {
+                "name": "Survey hexa",
+                "params": {
+                  "airframe_type": "Hexa",
+                  "motor_count": 6
+                },
+                "notes": "mapping rig"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "integer"
+                    },
+                    "builds": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BuildSummary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "builds",
+        "description": "Save `params` under `name`; saving a name you already have overwrites it. `params` takes the same fields and the same checks as `/analyze`."
+      }
+    },
+    "/builds/{id}": {
+      "parameters": [
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "string"
+          },
+          "description": "The build's id, or its name. Builds are your own: another person's answers 404."
+        }
+      ],
+      "get": {
+        "tags": [
+          "Builds"
+        ],
+        "summary": "Fetch one of your builds",
+        "operationId": "getBuild",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Build"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "builds"
+      },
+      "delete": {
+        "tags": [
+          "Builds"
+        ],
+        "summary": "Delete one of your builds",
+        "operationId": "deleteBuild",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "builds": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BuildSummary"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ok",
+                    "builds"
+                  ],
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          }
+        },
+        "x-metered": true,
+        "x-area": "builds",
+        "description": "Deletes one of your builds. A build that is not there, or not yours, answers 404."
+      }
+    },
+    "/crash": {
+      "post": {
+        "tags": [
+          "Forensics"
+        ],
+        "summary": "Analyze a flight log after an incident",
+        "operationId": "analyzeCrashLog",
+        "description": "POST the log file itself as the request body (binary, not multipart, not base64) with the original filename in the `name` query parameter. The format is detected from the file's own bytes, so the extension does not matter: ArduPilot dataflash (.bin), MAVLink telemetry (.tlog), PX4 ULog (.ulg), DJI flight records (.txt, current encrypted ones included), Parrot FreeFlight JSON, GUTMA flight-logging JSON, Litchi, Airdata and DJI GO flight-log CSV, and Betaflight or INAV Blackbox (.bbl).\n\nReturns the verdict, the event timeline, the preconditions in the seconds before the event, downsampled series, and a `diagnostics` block covering pilot input, estimator health, pack internal resistance, compass interference, GPS quality and accelerometer clipping. Add `?charts=1` for rendered SVG charts; they roughly triple the response, so they are opt-in.\n\nRequires the Crash Analyzer add-on on the account (402 otherwise). Maximum upload 64 MB. Costs one metered unit, charged only once the upload is accepted.\n\nThe log waits in line to be read like every log uploaded to RotorLab. By default this call waits for the reading and answers with it, as above. A client that would rather not hold the connection adds `?async=1` (or sends the header `Prefer: respond-async`) and is answered `202` at once with a `token` and a `status_url`; it then asks `GET /api/v1/crash/{token}` until the reading is ready. A call whose log is not read within nine minutes, or that arrives while many calls are already waiting, is answered `503` with a `Retry-After` header and the same `token` and `status_url`: the log stays in line, and asking `status_url` for its reading costs nothing more. One member may have 5 logs waiting at once, counting logs sent from the analyzer pages in the app; a sixth is answered `429` before it is metered, with `waiting` in its body and a `Retry-After` of 30 seconds. The reading is kept for 7 days after it is ready. On a plan that includes no API calls and holds no credits the upload is answered 402 with `quota: none`, before it is read.",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 120
+            },
+            "description": "Original filename, echoed back as `filename`."
+          },
+          {
+            "name": "charts",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "0"
+            },
+            "description": "Set to 1 to include rendered SVG charts."
+          },
+          {
+            "name": "async",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "0"
+            },
+            "description": "Set to 1 to be answered 202 at once with the queued job instead of waiting for the reading."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Analysis result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrashResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Sent with `?async=1` or `Prefer: respond-async`: in line to be read. Ask `status_url` for the reading.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuedAnalysis"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "413": {
+            "description": "Log larger than 64 MB",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          }
+        },
+        "x-metered": true,
+        "x-area": "engine"
+      }
+    },
+    "/crash/{token}": {
+      "get": {
+        "tags": [
+          "Forensics"
+        ],
+        "summary": "A queued log reading",
+        "operationId": "getQueuedCrashReading",
+        "description": "Where a log sent with `?async=1` is in line, and once it is read, the reading itself, in exactly the shape `POST /crash` answers. Only the person whose key queued it may read it; any other key gets 404. Not metered: the upload was. Ask every few seconds; a reading is kept for 7 days after it is ready, then this answers 410.",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The `token` the upload was answered with. A token that is not one answers 404."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The reading",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CrashResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "In line to be read: ask `status_url` for the reading.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuedAnalysis"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "410": {
+            "$ref": "#/components/responses/Gone"
+          }
+        },
+        "x-metered": false,
+        "x-area": "engine"
+      }
+    },
+    "/flights": {
+      "get": {
+        "summary": "List flights on the organization's record",
+        "description": "Newest flown first. Narrow to one aircraft or one pilot.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only flights on this registered aircraft."
+          },
+          {
+            "name": "pilot_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only flights flown by this pilot."
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "Only flights flown on or after this date."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "maximum": 2000
+            },
+            "description": "How many, newest first; at most 2,000."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The flights",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      },
+      "post": {
+        "summary": "Record a flight (create, or correct one already sent)",
+        "description": "The write path a ground station uses when a flight ends. Supply `external_ref`, your own id for the flight, and a repeat of a reference the same member or station (the same API key) already sent corrects that flight in place instead of filing a second copy, so re-sending after a dropped link is safe. The same reference from another member or station never changes that flight: it is filed as its own flight, the reply says `reference_conflict: true` with a `reference_note`, and an admin is asked to review it. Two stations sharing one API key are one sender and correct each other's flights; give each station its own key. Name either a registered `asset_id` or a free-text `asset_name` for an airframe that is not in the registry. Flight time may be given in seconds or minutes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "external_ref": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Your id for this flight. Makes the write idempotent for you. At most 120 characters, and it may not end in ~s followed by digits (that ending is kept for RotorLab's own use)."
+                  },
+                  "asset_id": {
+                    "type": "integer",
+                    "description": "A registered aircraft."
+                  },
+                  "asset_name": {
+                    "type": "string",
+                    "description": "Used when the airframe is not registered."
+                  },
+                  "pilot_id": {
+                    "type": "integer",
+                    "description": "Who flew it. Defaults to the key's owner."
+                  },
+                  "battery_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "example": [
+                      4021,
+                      4022
+                    ],
+                    "description": "The battery packs flown, by RotorLab pack id, in the order named. Each pack's cycle is recorded against the flight, as in the logbook form. A pack problem never refuses a flight that happened: an id that is not a pack of your organization, an entry that is not an id, or a value that is not a list is left off the flight and named in the reply's `pack_note`. At most 12 packs are recorded; the rest are named in `pack_note`. A number that is not whole (1.5) is not a pack id and is left off; a whole number written as 2.0 is pack 2. On a re-send of the same `external_ref`, a list with usable packs (here or in `battery_serials`) replaces the recorded packs with these. Only an empty list, `\"battery_ids\": []`, with no usable pack in `battery_serials`, clears them. Leaving the field out or sending `null` leaves the recorded packs alone; so does an empty `battery_serials` list on its own, and so does a re-send whose named packs are all left off."
+                  },
+                  "battery_serials": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "example": [
+                      "TB65-0042"
+                    ],
+                    "description": "The battery packs flown, by serial, for a station that does not know the pack ids. Serials are matched ignoring case, spaces, dashes, dots and slashes. A serial with no pack on the register, or an entry that is not text, is left off the flight and named in the reply's `pack_note`; the flight is still filed. Can be combined with `battery_ids` (duplicates collapse, order kept). The same rules for 12 packs and for a re-send apply as for `battery_ids`: `null` or an empty list here never clears the recorded packs; to clear them send `\"battery_ids\": []`."
+                  },
+                  "battery_id": {
+                    "type": "integer",
+                    "deprecated": true,
+                    "description": "Deprecated: one pack by RotorLab pack id. Send `battery_ids` instead."
+                  },
+                  "duration_s": {
+                    "type": "number"
+                  },
+                  "duration_min": {
+                    "type": "number"
+                  },
+                  "flown_at": {
+                    "type": "string",
+                    "format": "date",
+                    "description": "ISO 8601: a date, optionally with a time and an offset or Z. A time with no offset is read in your organization's time zone and stored with that zone's offset."
+                  },
+                  "flight_type": {
+                    "type": "string",
+                    "enum": [
+                      "commercial",
+                      "training",
+                      "proficiency",
+                      "maintenance",
+                      "survey",
+                      "inspection",
+                      "public_safety",
+                      "test",
+                      "recreational",
+                      "other"
+                    ],
+                    "description": "What the flight was for: one of the listed kinds. A flight that is none of them is filed as `other` with `flight_type_other` saying what it was for. A flight already on record whose kind was filed before the list was enforced may send that kind back unchanged when it is re-sent; any other value is refused with 400."
+                  },
+                  "flight_type_other": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "What an `other` flight was for, one line. Required when `flight_type` is `other` and refused with any other kind."
+                  },
+                  "site": {
+                    "type": "string"
+                  },
+                  "night": {
+                    "type": "boolean"
+                  },
+                  "sorties": {
+                    "type": "integer"
+                  },
+                  "landings": {
+                    "type": "integer"
+                  },
+                  "conditions": {
+                    "type": "string"
+                  },
+                  "crew": {
+                    "type": "string",
+                    "description": "The crew as one line of free text, stored as sent. Send `crew_rows` to name members and their duties."
+                  },
+                  "crew_rows": {
+                    "type": "array",
+                    "maxItems": 12,
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "user_id": {
+                          "type": "integer",
+                          "description": "A member's id, the same `id` as `/pilots`."
+                        },
+                        "duty": {
+                          "type": "string",
+                          "description": "A duty on the organization's list: `vo` for a visual observer. `/sorties` lists the roles."
+                        },
+                        "duty_min": {
+                          "type": "number",
+                          "description": "Minutes on duty when it was not the whole flight."
+                        }
+                      }
+                    },
+                    "example": [
+                      {
+                        "user_id": 72,
+                        "duty": "vo"
+                      }
+                    ],
+                    "description": "The crew beside `pilot_id`, by member and duty. A line naming somebody who is not a member, a malformed id or a duty not on the list is left off and named in the reply's `crew_note`; the flight is filed either way."
+                  },
+                  "operating_basis": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "part107",
+                      "public_aircraft",
+                      "s44807",
+                      "part135",
+                      "s44809",
+                      "other",
+                      "rpas_oc"
+                    ],
+                    "example": "part107",
+                    "description": "The operating basis recorded for the flight: the first six for a United States organization, `rpas_oc` (operation under an RPAS operator certificate) or `other` for a Canadian one, and `other` elsewhere. Left out on a new flight, the sortie's or the organization's default is recorded, or blank when there is none; a default recorded this way is the organization's setting, not a statement by the crew. A value not on the list is recorded blank and named in the reply's `pic_note`; the flight is filed either way."
+                  },
+                  "pic_periods": {
+                    "type": "array",
+                    "maxItems": 24,
+                    "items": {
+                      "$ref": "#/components/schemas/PicPeriod"
+                    },
+                    "example": [
+                      {
+                        "role": "remote_pic",
+                        "pilot_id": 41,
+                        "from": "2026-11-20T14:02:10Z",
+                        "sent_at": "2026-11-20T14:02:10Z",
+                        "sysid": "1"
+                      },
+                      {
+                        "role": "at_controls",
+                        "pilot_id": 57,
+                        "from": "2026-11-20T14:05:00Z",
+                        "to": "2026-11-20T14:15:30Z",
+                        "reason": "Trainee under supervision"
+                      },
+                      {
+                        "role": "remote_pic",
+                        "pilot_id": 63,
+                        "from": "2026-11-20T14:20:44Z",
+                        "reason": "Battery swap",
+                        "name": "Pat Current"
+                      }
+                    ],
+                    "description": "Who the crew recorded as remote pilot in command (the remote pilot, in EU, UK and Canada terms), and who manipulated the flight controls, period by period. `pilot_id` on the body stays the remote pilot in command the crew recorded at takeoff. RotorLab records what the crew sent; it does not designate, check or approve anyone. Never refused: a period whose role or time cannot be read is left off, and a period naming somebody who is not a member of this organization is recorded with no member named, each named in the reply's `pic_note`. Overlapping remote pilot in command periods are recorded as sent and the overlapping time counts in no one's hours in RotorLab until an admin corrects it. On a re-send of the same `external_ref`, a body carrying `pic_periods` supersedes the periods this sender recorded (nothing is deleted; the record keeps its history), and a body without it leaves them. A flight on legal hold keeps its periods as they stand. Under 14 CFR 107.65 only: flight time recorded here never counts toward it."
+                  },
+                  "remarks": {
+                    "type": "string"
+                  },
+                  "jurisdiction": {
+                    "type": "string",
+                    "description": "Which regulatory framework this flight was flown under, as an ISO 3166-1 alpha-2 code (or `EU`). Empty means the organization's primary jurisdiction. Never restricted to the jurisdictions the organization has configured.",
+                    "example": "GB"
+                  },
+                  "operating_category": {
+                    "type": "string",
+                    "maxLength": 40,
+                    "description": "The tier of operation, in the vocabulary of the jurisdiction above: `part107`, `open_a2`, `specific`, `advanced`, `cat2` and so on. Free text; unknown values are stored as given.",
+                    "example": "specific"
+                  },
+                  "authorisation_id": {
+                    "type": "integer",
+                    "nullable": true,
+                    "description": "The authorization this flight was flown under, where the organization holds more than one."
+                  },
+                  "visual_mode": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "vlos",
+                      "evlos",
+                      "evlos1",
+                      "evlos2",
+                      "sheltered",
+                      "bvlos"
+                    ],
+                    "description": "How the flight was flown relative to the pilot's sight of it, in the regime's own words: `evlos1` and `evlos2` are Australia's EVLOS classes (Part 101 MOS 10.05), `sheltered` is Canada's sheltered operation (CAR 901.74). Under the US regime `evlos` means VLOS with a visual observer (14 CFR 107.31, 107.33): Part 107 has no extended visual line of sight."
+                  },
+                  "takeoff_at": {
+                    "type": "string",
+                    "description": "Time of take-off, as recorded. Stored as sent, so a local time with an offset is kept as the truth it is.",
+                    "example": "2026-08-04T09:14:00+01:00"
+                  },
+                  "landing_at": {
+                    "type": "string",
+                    "description": "Time of landing, as recorded."
+                  },
+                  "takeoff_site": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Where the flight took off, when that differs from `site`."
+                  },
+                  "landing_site": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Where the flight landed."
+                  },
+                  "takeoff_lat": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "takeoff_lon": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "landing_lat": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "landing_lon": {
+                    "type": "number",
+                    "nullable": true
+                  },
+                  "max_height_ft": {
+                    "type": "number",
+                    "nullable": true,
+                    "description": "Maximum height reached, as declared by the crew, in feet. Kept in step with max_height_m; send one or the other."
+                  },
+                  "max_height_m": {
+                    "type": "number",
+                    "nullable": true,
+                    "description": "Maximum height reached, as declared by the crew, in meters. The record keeps the height in meters with the unit it was sent in."
+                  },
+                  "max_distance_m": {
+                    "type": "number",
+                    "nullable": true,
+                    "description": "Maximum distance from the remote pilot."
+                  },
+                  "over_people": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "yes",
+                      "no"
+                    ],
+                    "description": "Empty means not stated, which is a different answer from `no` and is never reported as one."
+                  },
+                  "over_people_basis": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "participants",
+                      "sheltered",
+                      "cat1",
+                      "cat2",
+                      "cat3",
+                      "cat4",
+                      "waiver"
+                    ],
+                    "description": "The basis a flight over people was flown on (United States: 14 CFR 107.39). Empty means not stated; any other value is refused."
+                  },
+                  "dangerous_goods": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "yes",
+                      "no"
+                    ],
+                    "description": "Empty means not stated."
+                  },
+                  "consent": {
+                    "type": "string",
+                    "enum": [
+                      "",
+                      "yes",
+                      "no"
+                    ],
+                    "description": "Whether the people overflown and the property's owner or occupier consented (New Zealand rule 101.207). Empty means not stated."
+                  },
+                  "airspace_auth_provider": {
+                    "type": "string",
+                    "maxLength": 60,
+                    "description": "Who authorized the airspace: a LAANC supplier, an air traffic unit, an aerodrome. RotorLab issues none of these and verifies none of them; it records what the operator says they held.",
+                    "example": "CAA FRZ"
+                  },
+                  "airspace_auth_ref": {
+                    "type": "string",
+                    "maxLength": 80,
+                    "description": "The reference that authorization carries.",
+                    "example": "FRZ-2026-118"
+                  }
+                },
+                "description": "All of the jurisdiction fields below are optional and always accepted, whatever the organization's configured jurisdictions. A ground station written before they existed keeps working unchanged."
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Filed, or the flight its reference names corrected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightFiled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The flight named no aircraft, a value was not a number, or the reference was over 120 characters or ended in ~s followed by digits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A record already stored under this reference cannot be told apart from yours; send it again under a new reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/flights/{id}": {
+      "get": {
+        "summary": "One flight",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The flight",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      },
+      "delete": {
+        "summary": "Remove a flight from the record",
+        "description": "The flight is voided: it leaves the live record and is kept in the void ledger with who voided it and why, and the aircraft's flight count and hours are recomputed from what remains. A public-safety flight is voided only with an organization admin's approval: a key that is not an organization admin's files a request instead, answered 202, and the flight stays on the record, and in the public count, until an organization admin approves it.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "reason",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "description": "Why the flight is being voided, kept with the void or the request."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Voided: `{\"ok\": true}`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "A public-safety flight: a void request was filed for an organization admin to approve, and the flight is still on the record. Body: `{\"ok\": true, \"pending\": true, \"request_id\": <int>}`. Do not retry: a second call while the request waits is answered 409.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoidRequested"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "Not voided: the flight is on legal hold, or a request to void it is already waiting for an organization admin. The error says which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/flights/{id}/log": {
+      "post": {
+        "summary": "Attach the log file to a flight already on the record",
+        "description": "The body is the raw log file (any format the log readers take), not JSON and not a multipart form. Reached with the 'flights' scope, so a ground-station device key can use it. Costs no credits and no quota: storing a log is not analysis. The limit is 512 MB; a 45-minute high-rate dataflash log is 225-450 MB. The body streams to disk rather than being held in memory.\n\nThis call stores and QUEUES; it does not parse. Reading a log costs roughly 18 MB of memory and 2.6 seconds per MB, so it happens in a separate background worker and the response returns immediately. Branch on 'analysis_state': 'queued' is the normal success case, 'none' means Fleet Health does not cover that aircraft (it holds no Fleet Manager slot), 'too_large' means stored but above the automatic-analysis size, 'done' means these bytes were already read, 'failed' carries log.error.\n\nFile the flight first and attach second, as a separate outbox entry, so a storage failure can never cost the operator their flight record. Re-sending identical bytes for the same flight returns the existing record: dedupe is on the SHA-256 of the body.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The flight id returned when the flight was filed."
+          },
+          {
+            "name": "name",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 160
+            },
+            "description": "The log's original filename, kept for the download header. Metadata only: the format is read from the file's own bytes, never from its name."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stored. Read `analysis_state`: `queued` is the normal outcome.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FlightLogStored"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Not a recognized log, an empty body, a body shorter than Content-Length promised, or the organization's storage is full.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "description": "These bytes are already stored with another flight; `duplicate_of` names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Over the 512 MB limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/checklists": {
+      "get": {
+        "summary": "Checklist templates, and completed runs",
+        "parameters": [
+          {
+            "name": "flight_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only runs filed against this flight."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Templates and runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistsList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "checklists",
+        "tags": [
+          "Records"
+        ]
+      },
+      "post": {
+        "summary": "File a completed checklist",
+        "description": "Idempotent on `external_ref` in the same way as a flight: a repeat from the same member or station (the same API key) corrects that run, and the same reference from another member or station is filed as its own run with `reference_conflict: true` and a `reference_note`, never changing the other run. Two stations sharing one API key are one sender. The run stores the items as they read at the time, so revising the template later never rewrites what was already signed off. An item you do not answer is recorded as not checked; an answer that matches nothing on the current template is kept and flagged rather than discarded, so a tablet completing a cached older card never loses what the crew actually did.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "external_ref": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "description": "Your id for this run. At most 120 characters, and it may not end in ~s followed by digits."
+                  },
+                  "template_id": {
+                    "type": "integer"
+                  },
+                  "flight_id": {
+                    "type": "integer"
+                  },
+                  "asset_id": {
+                    "type": "integer"
+                  },
+                  "completed_at": {
+                    "type": "string"
+                  },
+                  "notes": {
+                    "type": "string"
+                  },
+                  "results": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "text": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "type": "string",
+                          "enum": [
+                            "pass",
+                            "fail",
+                            "skip"
+                          ]
+                        },
+                        "note": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The run as filed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChecklistFiled"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The checklist was empty or unknown, or the reference was over 120 characters or ended in ~s followed by digits",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "description": "A record already stored under this reference cannot be told apart from yours; send it again under a new reference",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "x-metered": false,
+        "x-area": "checklists",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/missions": {
+      "get": {
+        "summary": "List the organization's mission records",
+        "description": "Unmetered. What a credential sees follows what it may write: a key with the missions scope reads like its owner (their own missions plus ones shared to their group or org); a device credential sees only missions shared to the org - the published set a ground station may fly. Private drafts never reach a device. Requires the Mission Planning add-on.",
+        "operationId": "listMissions",
+        "responses": {
+          "200": {
+            "description": "The missions, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "parameters": [
+          {
+            "name": "pilot_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only missions authored by this pilot - the 'missions for the pilot the crew selected' pull. Applied on top of the visibility rules, never instead of them."
+          }
+        ],
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Missions"
+        ]
+      },
+      "post": {
+        "summary": "Save or update a mission record",
+        "description": "Unmetered. Writing requires the missions scope and the key's role needs Flights & logs (manage); device credentials are read-only. Body: {name, payload}; payload is the planner's mission payload (512 KB cap). A new mission is PRIVATE until shared from the planner's mission library; saving an existing name in your library updates it.",
+        "operationId": "saveMission",
+        "responses": {
+          "200": {
+            "description": "Saved; the record's id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionSaved"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "missions",
+        "tags": [
+          "Missions"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "payload": {
+                    "type": "object",
+                    "properties": {},
+                    "description": "The planner's mission payload (512 KB at most), as POST /missions/import answers it in `mission`.",
+                    "additionalProperties": true
+                  }
+                },
+                "required": [
+                  "name",
+                  "payload"
+                ],
+                "additionalProperties": true
+              }
+            }
+          }
+        }
+      }
+    },
+    "/missions/{id}": {
+      "get": {
+        "summary": "One mission record, payload included",
+        "operationId": "getMission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The mission",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Missions"
+        ]
+      },
+      "delete": {
+        "summary": "Delete a mission record",
+        "description": "Requires the missions scope; device credentials are read-only.",
+        "operationId": "deleteMission",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-metered": false,
+        "x-area": "missions",
+        "tags": [
+          "Missions"
+        ]
+      }
+    },
+    "/missions/{id}/plan": {
+      "get": {
+        "summary": "The mission as a QGroundControl .plan",
+        "description": "Unmetered. The endpoint a Fleet Server or ground station calls to pull a flyable plan. Returns {id, name, owner_id, plan} where plan is a complete .plan document (fileType Plan, mission + geoFence + rallyPoints), byte-compatible with QGroundControl's own loader. Visibility rules apply: a device credential can pull org-shared missions only.",
+        "operationId": "getMissionPlan",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The plan document",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionPlan"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Missions"
+        ]
+      }
+    },
+    "/missions/import": {
+      "post": {
+        "summary": "Convert a .plan into a mission payload",
+        "description": "Requires the missions area. Body: {plan} holding a QGroundControl .plan document. Answers `{ok, mission}` without saving: `mission` is the planner payload, which POST /missions takes as `payload`. Simple-mission items convert; complex items are skipped and counted.",
+        "operationId": "importMissionPlan",
+        "responses": {
+          "200": {
+            "description": "The converted mission payload",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MissionImported"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "missions",
+        "tags": [
+          "Missions"
+        ]
+      }
+    },
+    "/workorders": {
+      "get": {
+        "summary": "List work orders",
+        "description": "Maintenance work orders for the organization. Unmetered. The read behind the workorder.raised and workorder.closed webhook events.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Limit to one aircraft"
+          },
+          {
+            "name": "open",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "1 to list open orders only"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The work orders",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkOrderList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/workorders/{id}": {
+      "get": {
+        "summary": "One work order",
+        "description": "Unmetered.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The work order",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkOrderOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/components": {
+      "get": {
+        "summary": "List components",
+        "description": "Fitted and spare components with serials and life. Unmetered.",
+        "parameters": [
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Limit to one aircraft"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The components",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComponentList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/types": {
+      "get": {
+        "summary": "List aircraft types",
+        "description": "Frozen type baselines with serial and open bulletin counts. Unmetered.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The types",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypeList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/types/{id}": {
+      "get": {
+        "summary": "One type",
+        "description": "The frozen design, its serials, bulletins, and performance conformity against the baseline. Unmetered.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypeOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/bulletins": {
+      "get": {
+        "summary": "List service bulletins",
+        "description": "Every bulletin with status. Unmetered.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The bulletins",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulletinList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/bulletins/{id}": {
+      "get": {
+        "summary": "Bulletin compliance",
+        "description": "Per-serial compliance for one bulletin; the read behind bulletin.issued. Unmetered.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The bulletin's per-serial compliance",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulletinOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/health": {
+      "get": {
+        "summary": "Fleet airworthiness map",
+        "description": "go, limits, advisory, unknown or no_go per aircraft, in state, with the reasons. Parse state, never readiness: readiness is a label in the pages' words and changed in 3.4.2. The key names did not change in 3.4.2, but counts by state move: from 3.4.2 urgent work open, an open mandatory service bulletin before its compliance date (its work order is urgent) and a part life limit reached on time not counted read limits, not advisory. go reads No flags; advisory reads No flags with its count of notes (No flags, 2 notes), planning or setup items; limits reads Limits on record. read (list) names what the reading read for that aircraft (registration only where an expiry is on file). judged (boolean) is false where the aircraft has no maintenance program and no flights on record: state stays go or advisory, the pages print Nothing judged, and the aircraft is not counted as No flags or as available, so read judged before counting a go or advisory aircraft as available. missing lists what is absent (type, program, flights). notes (integer) counts the notes. A reason may carry limit: true, which is why its level is limits. Unknown is a health alert nobody has reviewed yet. Unmetered.",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Airworthiness by aircraft",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthMap"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/health/{id}": {
+      "get": {
+        "summary": "One aircraft's health",
+        "description": "Flags, measured-flight count, and the airworthiness answer: the same reading as one entry of GET /health (state, readiness, limits, advisory, notes, judged, missing, why, reasons), with the same 3.4.2 notes there: parse state, never readiness, and read judged before counting a go or advisory aircraft as available. Unmetered.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One aircraft's health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "tags": [
+          "Operations"
+        ],
+        "x-metered": false,
+        "x-area": "flights"
+      }
+    },
+    "/pilots": {
+      "get": {
+        "summary": "Who a flight may be filed for, with where each pilot stands",
+        "description": "The organization's roster with no email addresses. A device credential or an organization admin's key reads every pilot's currency; another person's key reads its holder's own. Currency is reported so a crew knows where it stands; it must never be used to prevent a flight. Unmetered.",
+        "operationId": "listPilots",
+        "responses": {
+          "200": {
+            "description": "The roster",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PilotList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/sorties": {
+      "get": {
+        "summary": "The day's sorties and the crew each plans",
+        "description": "The planned and launched sorties of one day (the organization's today unless `day` is given), each with its job's title, its operating basis and the crew it plans: the planned remote pilot in command first, then each crew member with their role. A ground station reads it to offer the job's crew first; anyone on `/pilots` stays selectable. The crew designates the remote pilot in command; RotorLab does not designate or approve anyone. Data minimization: a device key sits on shared station hardware, so a seat carries a member's id and name only, never an email address, phone number, currency, standing or readiness reason, and a sortie carries the job's title only, never its client, reference, notes, scope, risk reading or Launch acknowledgement. Device keys may read it. Unmetered.",
+        "operationId": "listSorties",
+        "parameters": [
+          {
+            "name": "day",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "format": "date"
+            },
+            "description": "YYYY-MM-DD. Defaults to the organization's today."
+          },
+          {
+            "name": "asset_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Only the sorties planned on this aircraft."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The day's sorties",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SortieList"
+                },
+                "example": {
+                  "day": "2026-11-20",
+                  "sorties": [
+                    {
+                      "id": 311,
+                      "day": "2026-11-20",
+                      "window": "14:00-16:00",
+                      "status": "out",
+                      "asset_id": 12,
+                      "job_id": 88,
+                      "job_title": "Bridge inspection, span 4",
+                      "operating_basis": "part107",
+                      "seats": [
+                        {
+                          "user_id": 41,
+                          "name": "Lee Smith",
+                          "role": "remote_pic",
+                          "duty": "pic",
+                          "duty_label": "Remote PIC (remote pilot in command)",
+                          "controls": true,
+                          "planned_pic": true,
+                          "planned_by": "Jo Admin"
+                        },
+                        {
+                          "user_id": 57,
+                          "name": "Sam Trainee",
+                          "role": "at_controls",
+                          "duty": "manip",
+                          "duty_label": "Person manipulating the flight controls",
+                          "controls": true
+                        },
+                        {
+                          "user_id": 72,
+                          "name": "Ana Ruiz",
+                          "role": "visual_observer",
+                          "duty": "vo",
+                          "duty_label": "VO (visual observer)",
+                          "controls": false
+                        }
+                      ]
+                    }
+                  ],
+                  "roles": [
+                    {
+                      "role": "remote_pic",
+                      "duty": "pic",
+                      "label": "Remote PIC (remote pilot in command)"
+                    },
+                    {
+                      "role": "at_controls",
+                      "duty": "manip",
+                      "label": "Person manipulating the flight controls"
+                    },
+                    {
+                      "role": "visual_observer",
+                      "duty": "vo",
+                      "label": "VO (visual observer)"
+                    }
+                  ],
+                  "note": "The crew this sortie plans. The crew designates the remote pilot in command; RotorLab does not designate or approve anyone."
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/aircraft": {
+      "get": {
+        "summary": "The aircraft register",
+        "description": "What a flight may be filed against: name, registration, serial, model, status, Remote ID serial, class marking, mass, registration details, flights and hours. Unmetered.",
+        "operationId": "listAircraft",
+        "responses": {
+          "200": {
+            "description": "The register",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AircraftList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/ml/scores": {
+      "get": {
+        "summary": "Advisory model scores on the organization's records",
+        "description": "Current scores, filtered by `subject_type`, `subject_id` and `kind`. When the organization turned model annotations off the list is empty and `annotations` is `off`. Unmetered.",
+        "operationId": "listScores",
+        "parameters": [
+          {
+            "name": "subject_type",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "What the score is about, such as flight or component."
+          },
+          {
+            "name": "subject_id",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The scores",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Scores"
+        ]
+      },
+      "post": {
+        "summary": "Write an advisory score",
+        "description": "For a device credential or an organization admin's key; other keys are refused with 403. A score is advisory: it is shown beside the record and changes nothing. Unmetered.",
+        "operationId": "writeScore",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subject_type": {
+                    "type": "string"
+                  },
+                  "subject_id": {
+                    "type": "integer"
+                  },
+                  "kind": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "number"
+                  },
+                  "model": {
+                    "type": "string"
+                  },
+                  "model_version": {
+                    "type": "string"
+                  },
+                  "top_features": {
+                    "type": "array",
+                    "items": {}
+                  },
+                  "horizon": {
+                    "type": "number"
+                  },
+                  "horizon_unit": {
+                    "type": "string"
+                  },
+                  "note": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "subject_type",
+                  "subject_id",
+                  "kind",
+                  "value",
+                  "model"
+                ],
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Written",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoreWritten"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "flights",
+        "tags": [
+          "Scores"
+        ]
+      }
+    },
+    "/jobs": {
+      "get": {
+        "summary": "The organization's jobs",
+        "description": "Read only. The key must carry the jobs area by name, and its holder Clients and Jobs (view); a device credential is refused. Client contacts, notes, scope, site and credentials are not returned. Unmetered.",
+        "operationId": "listJobs",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "maximum": 500
+            },
+            "description": "How many rows, at most 500"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "How many rows to skip"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "quoted",
+                "open",
+                "complete",
+                "cancelled"
+              ]
+            },
+            "description": "One status only"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The organization's jobs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "jobs",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/jobs/{id}": {
+      "get": {
+        "summary": "One job",
+        "description": "Read only. The key must carry the jobs area by name, and its holder Clients and Jobs (view); a device credential is refused. Client contacts, notes, scope, site and credentials are not returned. Unmetered.",
+        "operationId": "getJob",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The record's number"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One job",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such record in this organization"
+          }
+        },
+        "x-metered": false,
+        "x-area": "jobs",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/clients": {
+      "get": {
+        "summary": "The organization's clients",
+        "description": "Read only. The key must carry the jobs area by name, and its holder Clients and Jobs (view); a device credential is refused. Client contacts, notes, scope, site and credentials are not returned. Unmetered.",
+        "operationId": "listClients",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 200,
+              "maximum": 500
+            },
+            "description": "How many rows, at most 500"
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            },
+            "description": "How many rows to skip"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The organization's clients",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientList"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "x-metered": false,
+        "x-area": "jobs",
+        "tags": [
+          "Records"
+        ]
+      }
+    },
+    "/clients/{id}": {
+      "get": {
+        "summary": "One client",
+        "description": "Read only. The key must carry the jobs area by name, and its holder Clients and Jobs (view); a device credential is refused. Client contacts, notes, scope, site and credentials are not returned. Unmetered.",
+        "operationId": "getClient",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            },
+            "description": "The record's number"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One client",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ClientOne"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "description": "No such record in this organization"
+          }
+        },
+        "x-metered": false,
+        "x-area": "jobs",
+        "tags": [
+          "Records"
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "rl_*",
+        "description": "Send your key as `Authorization: Bearer rl_...`. The header `X-API-Key: rl_...` is also accepted."
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "No API key, or one that is not valid (revoked, ended, or its holder's access has ended). Send it as `Authorization: Bearer rl_...`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Invalid or missing API key"
+            }
+          }
+        },
+        "headers": {
+          "WWW-Authenticate": {
+            "schema": {
+              "type": "string"
+            },
+            "description": "Bearer realm=\"RotorLab API\""
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The key is valid but this call is not allowed, and the error says why: the key lacks the area the call needs (`area` names it, and the error says how to get a key with it); the key is read only and the call would change a record (`read_only: true`); the key holder's role does not reach this record; the organization requires two-factor authentication or single sign-on the holder has not completed (`mfa_setup_required`, `sso`); an organization admin has not set up two-factor authentication within 14 days of becoming one; or the plan has ended (a trial, a lapsed billing period, a suspended organization). Refusals spend nothing.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            },
+            "examples": {
+              "area": {
+                "value": {
+                  "error": "This credential is not permitted to use the 'builds' area of the API. Create a key with the 'builds' area (Your saved builds) ticked under Organization, Integrations, API keys; an organization admin decides who may create keys.",
+                  "area": "builds"
+                }
+              },
+              "read_only": {
+                "value": {
+                  "error": "This key is read only: it reads records and runs the engine, and changes nothing. Create a key with read and write access for this.",
+                  "read_only": true
+                }
+              },
+              "role": {
+                "value": {
+                  "error": "Your role does not let you see Maintenance. Ask an organization admin to tick view under Maintenance on your role."
+                }
+              },
+              "plan": {
+                "value": {
+                  "error": "Your organization's trial has ended. Contact your administrator."
+                }
+              }
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "A body or value the call cannot read; the error names the field and what it takes.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "freq_mhz must be a number in MHz (got abc)"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "No such record in your organization (or not yours), or a path that is no endpoint. Never metered.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Build not found"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Wait and send again. Either today's quota and the credit balance are spent (`quota: exhausted`; Retry-After is the seconds to the 00:00 UTC reset, or add credits), or five of your logs are already waiting to be read (`waiting`; Retry-After 30).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            },
+            "examples": {
+              "exhausted": {
+                "value": {
+                  "error": "Rate limit reached: daily quota and credits are exhausted. The quota resets at 00:00 UTC, or add credits under Organization, Billing, API credits.",
+                  "quota": "exhausted",
+                  "limit": 1000,
+                  "used": 1000,
+                  "credits": 0
+                }
+              },
+              "waiting": {
+                "value": {
+                  "error": "You have 5 logs waiting to be read already. Send this one when one of them has been read.",
+                  "waiting": 5
+                }
+              }
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            },
+            "description": "Seconds to wait: to the daily reset for a spent quota, 30 when five logs are waiting."
+          },
+          "X-RateLimit-Limit": {
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-RateLimit-Remaining": {
+            "schema": {
+              "type": "integer"
+            }
+          },
+          "X-RateLimit-Credits": {
+            "schema": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "PaymentRequired": {
+        "description": "Something the account has not bought: the add-on this endpoint needs (the error names it), or, on a metered endpoint, a plan that includes no API calls and no credits left (`quota: none`). Waiting does not help, so there is no Retry-After: add the add-on, credits, or a plan that includes calls.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Refusal"
+            },
+            "examples": {
+              "addon": {
+                "value": {
+                  "error": "The Crash Analyzer add-on is not enabled on this account."
+                }
+              },
+              "no_api_calls": {
+                "value": {
+                  "error": "This plan includes no API calls. Add credits under Organization, Billing, API credits, or move to a plan that includes them.",
+                  "quota": "none",
+                  "limit": 0,
+                  "used": 0,
+                  "credits": 0
+                }
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "The path exists but does not take this method. The `Allow` header lists the ones it does.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "headers": {
+          "Allow": {
+            "schema": {
+              "type": "string"
+            },
+            "description": "The methods the path takes."
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Not done because of the record's state; the error says which (a legal hold, or a request already waiting).",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Gone": {
+        "description": "The reading has expired: readings are kept 7 days after they are ready.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "TooLarge": {
+        "description": "The body is over this endpoint's limit.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "The log is in line and was not read in time to answer this call; ask `status_url` for its reading. Retry-After says when to ask.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/QueuedAnalysis"
+            }
+          }
+        },
+        "headers": {
+          "Retry-After": {
+            "schema": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Version": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          }
+        }
+      },
+      "Usage": {
+        "type": "object",
+        "properties": {
+          "limit": {
+            "type": "integer",
+            "description": "Calls a day from your plan; 0 when the plan includes none."
+          },
+          "used": {
+            "type": "integer",
+            "description": "Calls made today by the key's holder."
+          },
+          "remaining": {
+            "type": "integer",
+            "description": "Calls left in today's quota."
+          },
+          "credits": {
+            "type": "integer",
+            "description": "The organization's credit balance."
+          },
+          "day": {
+            "type": "string",
+            "format": "date",
+            "description": "Today, in UTC."
+          },
+          "max_file_bytes": {
+            "type": "integer",
+            "description": "The largest flight log file one upload may carry, in bytes. A larger file is refused before it is stored."
+          },
+          "key": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "description": "The calling key's id."
+              },
+              "label": {
+                "type": "string",
+                "description": "The key's name."
+              },
+              "prefix": {
+                "type": "string",
+                "description": "The key's first characters."
+              },
+              "scopes": {
+                "type": "string",
+                "description": "The key's areas, space separated; empty means every area."
+              },
+              "areas": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Every area the key reaches, by its key (status, flights, checklists, engine, builds, missions, mcp, live); a key with empty scopes lists them all."
+              },
+              "unrestricted": {
+                "type": "boolean",
+                "description": "True when the key carries no scopes and so reaches every area."
+              },
+              "read_only": {
+                "type": "boolean",
+                "description": "True when the key reads and runs the engine only."
+              },
+              "created": {
+                "type": "string",
+                "description": "When the key was created."
+              },
+              "last_used": {
+                "type": "string",
+                "nullable": true
+              },
+              "expires": {
+                "type": "string",
+                "nullable": true,
+                "description": "When the key ends, as the account page shows it."
+              },
+              "expires_at": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true,
+                "description": "When the key ends, ISO 8601 in UTC; null for no end."
+              },
+              "expired": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "id",
+              "scopes",
+              "areas",
+              "read_only"
+            ],
+            "description": "The key making this call (a device credential describes itself).",
+            "additionalProperties": true,
+            "nullable": true
+          }
+        },
+        "required": [
+          "limit",
+          "used",
+          "remaining",
+          "credits",
+          "day",
+          "key"
+        ],
+        "additionalProperties": true
+      },
+      "BuildParams": {
+        "type": "object",
+        "description": "Build description covering multirotor, fixed-wing, and VTOL (quadplane/tiltrotor) aircraft. All fields optional; unspecified fields use the example profile's defaults. Multirotor fields are ignored on a pure wing and vice versa, so the same endpoint analyzes any airframe. Every field sent must be one of these: a name the engine does not have (a misspelling such as `airframe` or `motors`) is refused with 400 naming it and listing the accepted names, never read as its default. A whole-number field takes a whole number in its range (`motor_count` 1 to 1000), else 400 naming the field and the range.",
+        "properties": {
+          "airframe_type": {
+            "type": "string",
+            "example": "Quad X",
+            "enum": [
+              "Quad X",
+              "Quad H",
+              "Tricopter",
+              "Hexa",
+              "Y6 (coaxial)",
+              "Octo",
+              "Octo X8 (coaxial)",
+              "VTOL transition",
+              "Fixed wing (tractor)",
+              "Fixed wing (pusher)",
+              "Fixed wing (twin)",
+              "Quadplane (lift + tractor)",
+              "Quadplane (lift + pusher)",
+              "Quadplane (lift + twin)",
+              "Tiltrotor (tricopter)",
+              "Tiltrotor (tilt-quad)"
+            ]
+          },
+          "motor_count": {
+            "type": "integer",
+            "example": 4,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "coaxial": {
+            "type": "boolean"
+          },
+          "dry_mass_g": {
+            "type": "number"
+          },
+          "arm_length_mm": {
+            "type": "number"
+          },
+          "prop_diameter_in": {
+            "type": "number",
+            "example": 7
+          },
+          "prop_pitch_in": {
+            "type": "number"
+          },
+          "prop_blades": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16
+          },
+          "prop_material": {
+            "type": "string",
+            "enum": [
+              "molded",
+              "carbon"
+            ],
+            "description": "What the blades are made of: molded (plastic or nylon) or carbon fiber. A carbon prop makes about 0.71 of a molded one's static thrust a revolution."
+          },
+          "motor_kv": {
+            "type": "number"
+          },
+          "max_thrust_per_motor_g": {
+            "type": "number"
+          },
+          "esc_current_a": {
+            "type": "number"
+          },
+          "altitude_m": {
+            "type": "number",
+            "minimum": -500,
+            "maximum": 11000,
+            "description": "Site altitude above sea level, m: from -500 to 11,000."
+          },
+          "temp_c": {
+            "type": "number"
+          },
+          "flat_plate_area_m2": {
+            "type": "number"
+          },
+          "usable_fraction": {
+            "type": "number"
+          },
+          "wing_span_mm": {
+            "type": "number",
+            "description": "Fixed-wing / VTOL: tip-to-tip span"
+          },
+          "wing_chord_mm": {
+            "type": "number"
+          },
+          "wing_area_dm2": {
+            "type": "number"
+          },
+          "wing_cl_max": {
+            "type": "number",
+            "description": "Max lift coefficient, sets stall speed"
+          },
+          "wing_cd0": {
+            "type": "number"
+          },
+          "wing_oswald_e": {
+            "type": "number"
+          },
+          "prop_eff_cruise": {
+            "type": "number"
+          },
+          "cruise_speed_kmh": {
+            "type": "number",
+            "description": "Target cruise; blank lets the engine solve it"
+          },
+          "body_length_mm": {
+            "type": "number",
+            "description": "Balance: fuselage / boom length for the CG frame"
+          },
+          "frame_preset": {
+            "type": "string",
+            "description": "Name of a dimensioned frame preset to seat the build on"
+          },
+          "motor_mass_g": {
+            "type": "number"
+          },
+          "batteries": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "aux_rails": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "ducted": {
+            "type": "boolean"
+          },
+          "duct_expansion": {
+            "type": "number"
+          },
+          "duct_loss": {
+            "type": "number"
+          },
+          "prop_max_rpm": {
+            "type": "number"
+          },
+          "motor_stator": {
+            "type": "string"
+          },
+          "max_thrust_basis": {
+            "type": "string"
+          },
+          "measured_rpm_loaded": {
+            "type": "number"
+          },
+          "motor_rm_mohm": {
+            "type": "number"
+          },
+          "motor_i0_a": {
+            "type": "number"
+          },
+          "motor_bus": {
+            "type": "string"
+          },
+          "motor_cont_a": {
+            "type": "number"
+          },
+          "esc_efficiency": {
+            "type": "number",
+            "minimum": 0.5,
+            "maximum": 1,
+            "description": "Fraction of the ESC input power that reaches the motor: from 0.5 to 1, where 1 is the lossless drive."
+          },
+          "motor_max_power_w": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "The maker's short-time maximum electrical power of one motor, W. Full throttle stops where each motor reaches it; 0 (the default) is no cap."
+          },
+          "motor_cont_power_w": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "The maker's continuous electrical power rating of one motor, W, read by the sustained-hover check; 0 (the default) means none is stated."
+          },
+          "esc_current_limit_a": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "The current one ESC holds its motor to, A. Full throttle stops where each motor's current reaches it; 0 (the default) is no limit."
+          },
+          "connector_type": {
+            "type": "string"
+          },
+          "main_wire_awg": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 40
+          },
+          "main_wire_mm2": {
+            "type": "number"
+          },
+          "connector_rating_a": {
+            "type": "number"
+          },
+          "connector_rating_v": {
+            "type": "number"
+          },
+          "payload_mass_g": {
+            "type": "number"
+          },
+          "occupants": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 20
+          },
+          "occupant_mass_g": {
+            "type": "number"
+          },
+          "occupant_pos": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y, z] in millimeters from the build datum"
+          },
+          "occupant_positions": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            "description": "One [x, y, z] seat per occupant, millimeters"
+          },
+          "parts": {
+            "type": "object"
+          },
+          "catalog_aircraft": {
+            "type": "object",
+            "description": "The catalog aircraft the build was started from: id and pack_version, or empty"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "frame_cg_mm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y, z] in millimeters from the build datum"
+          },
+          "payload_pos": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y, z] in millimeters from the build datum"
+          },
+          "cruise_motor_x_mm": {
+            "type": "number"
+          },
+          "cruise_motor_y_mm": {
+            "type": "number"
+          },
+          "cruise_motor_z_mm": {
+            "type": "number"
+          },
+          "lift_boom_x_mm": {
+            "type": "number"
+          },
+          "lift_fore_y_mm": {
+            "type": "number"
+          },
+          "lift_aft_y_mm": {
+            "type": "number"
+          },
+          "lift_z_mm": {
+            "type": "number"
+          },
+          "figure_of_merit": {
+            "type": "number"
+          },
+          "coax_power_penalty": {
+            "type": "number"
+          },
+          "coax_thrust_factor": {
+            "type": "number"
+          },
+          "cruise_power_factor": {
+            "type": "number"
+          },
+          "prop_ct": {
+            "type": "number"
+          },
+          "loaded_rpm_fraction": {
+            "type": "number"
+          },
+          "pitch_slip": {
+            "type": "number"
+          },
+          "frame_type": {
+            "type": "string",
+            "enum": [
+              "fixed_wing",
+              "multirotor",
+              "quadplane",
+              "tiltrotor",
+              "vtol_transition"
+            ],
+            "description": "Set by airframe_type; send that instead"
+          },
+          "arm_chord_mm": {
+            "type": "number"
+          },
+          "lift_motor_count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1000
+          },
+          "lift_motor_kv": {
+            "type": "number"
+          },
+          "lift_motor_rm_mohm": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1000000,
+            "description": "Terminal resistance of one lift motor, mOhm (quadplane lift group); 0 (the default) is a lossless lift drive."
+          },
+          "lift_motor_i0_a": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000,
+            "description": "No-load current of one lift motor, A (quadplane lift group); 0 (the default) is a lossless lift drive."
+          },
+          "lift_prop_diameter_in": {
+            "type": "number"
+          },
+          "lift_prop_pitch_in": {
+            "type": "number"
+          },
+          "lift_prop_max_rpm": {
+            "type": "number"
+          },
+          "lift_esc_current_a": {
+            "type": "number"
+          },
+          "lift_max_thrust_per_motor_g": {
+            "type": "number"
+          },
+          "lift_drag_area_m2": {
+            "type": "number"
+          },
+          "mtom_g": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 20000000.0
+          },
+          "max_dimension_mm": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100000
+          },
+          "speed_limit_kmh": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 2000
+          },
+          "firmware_name": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "firmware_version": {
+            "type": "string",
+            "maxLength": 80
+          },
+          "param_file_sha256": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "intended_operations": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "intended_envelope": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "safety_lost_link": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "safety_low_battery": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "safety_height_limit": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "safety_termination": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "control_station": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "c2_link": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "control_software": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "remote_id_means": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "remote_id_serial": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "lighting": {
+            "type": "string",
+            "maxLength": 300
+          }
+        },
+        "additionalProperties": false
+      },
+      "AnalyzeResponse": {
+        "type": "object",
+        "properties": {
+          "out": {
+            "type": "object",
+            "description": "Headline outputs. Which fields are present depends on the airframe: multirotors report hover figures, wings report stall/cruise/climb, and VTOLs report both.",
+            "properties": {
+              "auw_g": {
+                "type": "number",
+                "description": "All-up weight"
+              },
+              "twr": {
+                "type": "number",
+                "description": "Thrust-to-weight (rotor-borne)"
+              },
+              "hover_min": {
+                "type": "number",
+                "description": "Hover endurance (rotorcraft / VTOL lift); null where there is no hover to time",
+                "nullable": true
+              },
+              "cruise_min": {
+                "type": "number",
+                "description": "Cruise endurance (winged)"
+              },
+              "hover_current_total_a": {
+                "type": "number",
+                "description": "Motor-bus hover current, at the pack voltage the hover holds (v_hover_load)"
+              },
+              "v_hover_load": {
+                "type": "number",
+                "description": "Motor-bus voltage in a steady hover: nominal less the hover current times the pack resistance"
+              },
+              "drive_lossless": {
+                "type": "boolean",
+                "description": "True while no motor resistance, no-load current or ESC efficiency is entered"
+              },
+              "wot_current_a": {
+                "type": "number",
+                "description": "Full-throttle current: shaft power scaled by momentum theory, then the drive losses at that current"
+              },
+              "max_speed_kmh": {
+                "type": "number",
+                "description": "Top speed in still air"
+              },
+              "max_speed_limit": {
+                "type": "string",
+                "enum": [
+                  "thrust",
+                  "power",
+                  "pitch",
+                  "model-bound",
+                  null
+                ],
+                "description": "What bounds the top speed when a forward-flight model is active: available thrust, available power, the prop's pitch speed (thrust lapsing to zero there), or the model's own ceiling. Null when no forward-flight model ran",
+                "nullable": true
+              },
+              "max_speed_axial_kmh": {
+                "type": "number",
+                "description": "Multirotor: the airspeed through the tilted disc at top speed, V sin(alpha), compared with the pitch speed; null on a wing",
+                "nullable": true
+              },
+              "pitch_speed_kmh": {
+                "type": "number",
+                "description": "Geometric pitch speed at the loaded RPM"
+              },
+              "rpm_loaded": {
+                "type": "number",
+                "description": "Full-throttle loaded RPM"
+              },
+              "rpm_basis": {
+                "type": "string",
+                "enum": [
+                  "measured",
+                  "solved",
+                  "solved_capped",
+                  "assumed"
+                ],
+                "description": "Where rpm_loaded came from: measured, a measured loaded RPM entered for the build; solved where the motor's torque meets the prop's (needs the motor resistance) when that is below loaded_rpm_fraction of no-load; solved_capped when the solve is higher, so rpm_loaded keeps the assumed fraction and the solve judges only the prop match; or assumed as loaded_rpm_fraction of no-load"
+              },
+              "rpm_solved": {
+                "type": "number",
+                "description": "The solved full-throttle RPM, or null when the motor resistance is not entered",
+                "nullable": true
+              },
+              "hover_feasible": {
+                "type": "boolean",
+                "description": "False when no hover time is an answer: hover_infeasible_reason says why"
+              },
+              "hover_infeasible_reason": {
+                "type": "string",
+                "enum": [
+                  "twr",
+                  "sag",
+                  null
+                ],
+                "description": "twr: thrust-to-weight 1 or below; sag: the pack sags so far at the hover current that full throttle no longer lifts the aircraft. Null when it can hover",
+                "nullable": true
+              },
+              "coax_thrust_factor": {
+                "type": "number",
+                "description": "Share of its isolated max thrust each rotor of a coaxial pair makes; 1 when not coaxial"
+              },
+              "energy_wh": {
+                "type": "number"
+              },
+              "stall_speed_kmh": {
+                "type": "number",
+                "description": "Winged; null for a multirotor",
+                "nullable": true
+              },
+              "cruise_speed_kmh": {
+                "type": "number",
+                "description": "Winged"
+              },
+              "climb_rate_ms": {
+                "type": "number",
+                "description": "Best rate of climb (winged); null for a multirotor",
+                "nullable": true
+              },
+              "v_best_climb_kmh": {
+                "type": "number",
+                "nullable": true,
+                "description": "Winged; null for a multirotor"
+              },
+              "v_best_range_kmh": {
+                "type": "number",
+                "nullable": true,
+                "description": "Null when no forward-flight model ran (no flat-plate drag area)"
+              },
+              "v_best_endurance_kmh": {
+                "type": "number",
+                "nullable": true,
+                "description": "Null when no forward-flight model ran (no flat-plate drag area)"
+              },
+              "wing_loading_n_m2": {
+                "type": "number",
+                "nullable": true,
+                "description": "Winged; null for a multirotor"
+              },
+              "aspect_ratio": {
+                "type": "number",
+                "nullable": true,
+                "description": "Winged; null for a multirotor"
+              },
+              "pack_ir_mohm": {
+                "type": "number",
+                "description": "Effective pack internal resistance (measured or estimated); null with no battery",
+                "nullable": true
+              },
+              "sag_hover_pct": {
+                "type": "number",
+                "description": "Voltage sag at hover current, percent; null with no battery",
+                "nullable": true
+              },
+              "twr_mid_pack": {
+                "type": "number",
+                "description": "Thrust-to-weight at the pack's nominal (mid-pack) voltage with no load: the state-of-charge effect alone. Null where there is no hover thrust to judge",
+                "nullable": true
+              },
+              "sag_wot_pct": {
+                "type": "number",
+                "description": "Voltage sag at full throttle, percent, with the current falling as the square of the sagged voltage; null with no battery",
+                "nullable": true
+              },
+              "twr_sag": {
+                "type": "number",
+                "description": "Thrust-to-weight at mid-pack with the pack sagging at full-throttle current. Null where there is no hover thrust to judge",
+                "nullable": true
+              },
+              "esc_hover_util": {
+                "type": "number",
+                "description": "Hover current as a fraction of the ESC continuous rating; null with no hover",
+                "nullable": true
+              },
+              "thermal_margin_hover": {
+                "type": "number",
+                "nullable": true,
+                "description": "Null with no hover"
+              },
+              "prop_rpm_fraction": {
+                "type": "number",
+                "description": "Loaded RPM / no-load RPM"
+              },
+              "prop_load_verdict": {
+                "type": "string",
+                "enum": [
+                  "over-propped",
+                  "matched",
+                  "under-propped",
+                  "not judged"
+                ],
+                "description": "Judged only when rpm_basis is measured, solved or solved_capped, on the measured or solved RPM"
+              },
+              "motor_out": {
+                "type": "object",
+                "description": "Motor-out survivability: applicable, motor_out_twr, survivable, reason"
+              },
+              "wind": {
+                "type": "object",
+                "description": "Wind envelope: applicable, max_lean_deg, max_wind_hold_kmh, reason"
+              },
+              "weight_class": {
+                "type": "object",
+                "description": "Regulatory mass bands: `lines` holds one sentence per regime code (US, GB, EU, CA, AU, NZ, JP, ZA, IN, BR, SG) in that regime's own words; `us` and `eu` repeat those two. The EU and UK lines state a class only when the aircraft carries a mark; a mass never confers one."
+              }
+            },
+            "additionalProperties": true
+          },
+          "charts": {
+            "type": "object",
+            "description": "Inline SVG chart strings"
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "[level, message] pairs (ok|warn|bad)"
+          },
+          "lint": {
+            "type": "object",
+            "description": "Structured build-check results (same findings as checks, machine-readable)"
+          },
+          "platform": {
+            "type": "object",
+            "description": "Resolved platform description: airframe class, motor groups, and layout"
+          },
+          "cg": {
+            "$ref": "#/components/schemas/CgResult"
+          }
+        }
+      },
+      "RfLink": {
+        "type": "object",
+        "description": "One radio link. All fields optional; sensible defaults apply where absent. Each one sent must be a number, and a field name not listed here is refused with 400 naming it.",
+        "properties": {
+          "freq_mhz": {
+            "type": "number",
+            "example": 5800,
+            "description": "Must be positive"
+          },
+          "tx_power_mw": {
+            "type": "number",
+            "description": "Transmit power; or give tx_power_dbm"
+          },
+          "tx_power_dbm": {
+            "type": "number"
+          },
+          "tx_gain_dbi": {
+            "type": "number"
+          },
+          "rx_gain_dbi": {
+            "type": "number"
+          },
+          "rx_sens_dbm": {
+            "type": "number",
+            "example": -95
+          },
+          "cable_loss_db": {
+            "type": "number"
+          },
+          "misc_loss_db": {
+            "type": "number",
+            "description": "Polarization + pointing + other losses"
+          },
+          "fade_margin_db": {
+            "type": "number",
+            "description": "Link margin held in reserve"
+          },
+          "tx_height_m": {
+            "type": "number"
+          },
+          "rx_height_m": {
+            "type": "number"
+          }
+        },
+        "additionalProperties": false
+      },
+      "LinkBudget": {
+        "type": "object",
+        "description": "Resolved link. Distances in km, radii/clearances in meters, powers in dBm.",
+        "properties": {
+          "tx_power_dbm": {
+            "type": "number"
+          },
+          "eirp_dbm": {
+            "type": "number"
+          },
+          "free_space_range_km": {
+            "type": "number",
+            "description": "Range the budget alone allows"
+          },
+          "los_range_km": {
+            "type": "number",
+            "description": "Geometric line-of-sight horizon (the hard limiter)"
+          },
+          "radio_horizon_km": {
+            "type": "number",
+            "description": "4/3-earth radio horizon"
+          },
+          "max_range_km": {
+            "type": "number",
+            "description": "Usable range: the smaller of budget and line of sight"
+          },
+          "limiter": {
+            "type": "string",
+            "description": "Which term caps the range"
+          },
+          "breakpoint_km": {
+            "type": "number",
+            "description": "Two-ray ground-reflection breakpoint"
+          },
+          "two_ray_range_km": {
+            "type": "number"
+          },
+          "fresnel_radius_m": {
+            "type": "number",
+            "description": "First Fresnel-zone radius at mid-path"
+          },
+          "ground_clearance_m": {
+            "type": "number"
+          },
+          "fresnel_pct": {
+            "type": "number",
+            "description": "Percent of the first Fresnel zone that is clear"
+          },
+          "curve": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Received-power-vs-distance samples"
+          }
+        },
+        "additionalProperties": true
+      },
+      "CgResult": {
+        "type": "object",
+        "description": "Center of gravity and balance. Distances are millimeters from the build datum (`datum`): +x right, +y aft, +z up.",
+        "properties": {
+          "cg_mm": {
+            "type": "object",
+            "nullable": true,
+            "description": "Resolved center of gravity, in millimeters from the build datum. Null for a build with no mass.",
+            "properties": {
+              "x": {
+                "type": "number",
+                "description": "Millimeters, +x right"
+              },
+              "y": {
+                "type": "number",
+                "description": "Millimeters, +y aft"
+              },
+              "z": {
+                "type": "number",
+                "description": "Millimeters, +z up"
+              }
+            }
+          },
+          "total_mass_g": {
+            "type": "number",
+            "description": "All-up mass, grams"
+          },
+          "unplaced_g": {
+            "type": "number",
+            "description": "Mass not yet given a position, grams"
+          },
+          "datum": {
+            "type": "string",
+            "description": "What the distances are measured from: the rotor ring center or the wing leading edge at the root"
+          },
+          "regime": {
+            "type": "string",
+            "enum": [
+              "fixed_wing",
+              "multirotor",
+              "quadplane",
+              "tiltrotor",
+              "vtol_transition"
+            ],
+            "description": "The airframe's flight regime, which sets the datum"
+          },
+          "cg_pct_mac": {
+            "type": "number",
+            "nullable": true,
+            "description": "Balance as a percentage of the mean aerodynamic chord (winged only)"
+          },
+          "mac_mm": {
+            "type": "number",
+            "nullable": true,
+            "description": "Mean aerodynamic chord, millimeters (winged only)"
+          },
+          "offset_mm": {
+            "type": "object",
+            "nullable": true,
+            "description": "The center of gravity's offset from the hover rotors' centroid, in millimeters in plan: x and y along the axes and d the distance. Null for a fixed wing, which has no hover rotors.",
+            "properties": {
+              "x": {
+                "type": "number",
+                "description": "Millimeters, +x right"
+              },
+              "y": {
+                "type": "number",
+                "description": "Millimeters, +y aft"
+              },
+              "d": {
+                "type": "number",
+                "description": "Millimeters, the distance in plan"
+              }
+            }
+          },
+          "offset_r": {
+            "type": "number",
+            "nullable": true,
+            "description": "offset_mm.d over the hover rotors' lever arm: 10 mm is little on a large frame and much on a small one. Null for a fixed wing."
+          },
+          "arm_mm": {
+            "type": "number",
+            "nullable": true,
+            "description": "The build's arm length, millimeters"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Per-part mass and position"
+          },
+          "rotors": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            },
+            "description": "Resolved rotor positions"
+          },
+          "lift_centroid_mm": {
+            "type": "object",
+            "nullable": true,
+            "description": "Centroid of the hover rotors, in millimeters from the build datum. Null for a fixed wing.",
+            "properties": {
+              "x": {
+                "type": "number",
+                "description": "Millimeters, +x right"
+              },
+              "y": {
+                "type": "number",
+                "description": "Millimeters, +y aft"
+              },
+              "z": {
+                "type": "number",
+                "description": "Millimeters, +z up"
+              }
+            }
+          },
+          "rotor_ref_mm": {
+            "type": "number",
+            "description": "The hover rotors' lever arm the offset is judged against, in millimeters. Absent for a fixed wing."
+          }
+        }
+      },
+      "BuildSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "updated": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true,
+        "description": "A saved build. Also carries its sharing and history fields (visibility, tags, project, version_no and so on)."
+      },
+      "Build": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "The build's parameters as saved. A build saved by an older release can carry a field the engine no longer has; /analyze and /cg refuse such a field, so leave it out when sending them."
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What went wrong and, where it can, what to do."
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": true
+      },
+      "CrashResult": {
+        "type": "object",
+        "description": "Forensic reading of one flight log.",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "meta": {
+            "type": "object",
+            "description": "Aircraft and log context: source_format (dataflash | tlog | ulg), vehicle (copter, heli, plane, rover, sub, blimp, tracker), vehicle_label, firmware, duration_s, altitude_source, and the tuning parameters the checks used.",
+            "properties": {
+              "source_format": {
+                "type": "string",
+                "enum": [
+                  "dataflash",
+                  "tlog",
+                  "ulg"
+                ]
+              },
+              "vehicle": {
+                "type": "string"
+              },
+              "vehicle_label": {
+                "type": "string"
+              },
+              "firmware": {
+                "type": "string"
+              },
+              "duration_s": {
+                "type": "number"
+              },
+              "altitude_source": {
+                "type": "string",
+                "nullable": true
+              }
+            }
+          },
+          "crash": {
+            "type": "object",
+            "description": "The verdict. confidence is high when the autopilot itself recorded the crash, medium for a tracking-error departure, low for an attitude-only inference in a log with no attitude target.",
+            "properties": {
+              "detected": {
+                "type": "boolean"
+              },
+              "time": {
+                "type": "number",
+                "nullable": true,
+                "description": "Seconds from the start of the log."
+              },
+              "reason": {
+                "type": "string",
+                "nullable": true
+              },
+              "confidence": {
+                "type": "string",
+                "nullable": true,
+                "enum": [
+                  "high",
+                  "medium",
+                  "low",
+                  null
+                ]
+              },
+              "departure_t": {
+                "type": "number",
+                "nullable": true
+              },
+              "basis": {
+                "type": "string",
+                "nullable": true,
+                "description": "What named the crash: the autopilot's own record, an attitude departure, or a ground impact.",
+                "enum": [
+                  "autopilot",
+                  "departure",
+                  "impact",
+                  null
+                ]
+              },
+              "confidence_rule": {
+                "type": "string",
+                "nullable": true,
+                "description": "The fixed rule the confidence rests on, as one sentence."
+              }
+            }
+          },
+          "preconditions": {
+            "type": "object",
+            "description": "What the seconds before the event looked like, plus `findings`: an array of [category, sentence] pairs. A category starting with not_ (not_power, not_vibe, not_brownout, not_stall) says the log does not show that signature, which does not prove the cause absent; the rest (control, authority, vrs, thrust_loss, power, stall) are signatures found in the log. `causes` carries the same reading as one row per check."
+          },
+          "causes": {
+            "type": "array",
+            "description": "The cause table: one row per crash check, in a fixed order. `state` is found (the signature is in this log), not_found (the log does not show it, which does not prove the cause absent), not_checkable (the log does not carry what the check reads) or not_applicable (the check does not apply to this aircraft). `sentence` is what the log shows; `t` is seconds from the start of the log where a signature was found, else null.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "enum": [
+                    "crash_signature",
+                    "attitude_departure",
+                    "mixer_saturation",
+                    "descent_vrs",
+                    "control_authority",
+                    "battery_behavior",
+                    "vibration",
+                    "stall"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "found",
+                    "not_found",
+                    "not_checkable",
+                    "not_applicable"
+                  ]
+                },
+                "sentence": {
+                  "type": "string"
+                },
+                "t": {
+                  "type": "number",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "diagnostics": {
+            "type": "object",
+            "description": "Deeper diagnostics read from the same file: `rc_intent` (was the aircraft doing what it was told), `battery` (pack internal resistance fitted from the flight's own current draw), `ekf` (estimator innovation test ratios, where 1.0 is the rejection threshold), `compass` (field magnitude and whether it tracks throttle), `gps` (satellites, HDOP, fix drops) and `clipping` (accelerometer clip growth).\n\nEvery section carries `available`. When it is false the section carries a `reason` instead of numbers - a log that never recorded a magnetometer gets no compass reading rather than a zero. `findings` is the flat, severity-sorted list across all sections, each item carrying `section`, `key`, `level` (alert | warn | info), `title` and `detail`. `available_sections` names the sections this log could support."
+          },
+          "timeline": {
+            "type": "array",
+            "description": "Chronological [t, type, event, class] rows: modes, events, errors, arming, and autopilot status text.",
+            "items": {
+              "type": "array",
+              "items": {}
+            }
+          },
+          "series": {
+            "type": "object",
+            "description": "Downsampled plot series for the flight and for the window around the event."
+          },
+          "charts": {
+            "type": "object",
+            "description": "Only present with ?charts=1. Ready-to-embed SVG strings, keyed by chart name."
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Limits of this particular reading - for example that a telemetry log has no autopilot crash record, or that PX4 logs no crash verdict at all."
+          },
+          "msgs_present": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": true
+      },
+      "QueuedAnalysis": {
+        "type": "object",
+        "description": "A log waiting in line to be read.",
+        "properties": {
+          "queued": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string",
+            "description": "The handle to ask about it with."
+          },
+          "status_url": {
+            "type": "string",
+            "description": "Where to ask: GET it with the same key."
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "running"
+            ]
+          },
+          "position": {
+            "type": "integer",
+            "description": "1 is next in line; 0 while it is being read."
+          },
+          "ahead": {
+            "type": "integer",
+            "description": "How many logs are in line ahead of it."
+          },
+          "wait_s": {
+            "type": "integer",
+            "nullable": true,
+            "description": "A rough wait in seconds from how long recent readings took; null when there is too little to go on."
+          }
+        },
+        "additionalProperties": true,
+        "required": [
+          "token",
+          "status_url",
+          "state"
+        ]
+      },
+      "Refusal": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "What was refused and what to do about it."
+          },
+          "area": {
+            "type": "string",
+            "description": "403: the key area the call needs and this key lacks."
+          },
+          "read_only": {
+            "type": "boolean",
+            "description": "403: true when a read-only key tried to change a record."
+          },
+          "mfa_setup_required": {
+            "type": "boolean",
+            "description": "403: the key holder must set up two-factor authentication first."
+          },
+          "sso": {
+            "type": "boolean",
+            "description": "403: the organization requires a fresh single sign-on."
+          },
+          "quota": {
+            "type": "string",
+            "enum": [
+              "none",
+              "exhausted"
+            ],
+            "description": "402 `none`: the plan includes no API calls. 429 `exhausted`: today's quota and the credits are spent."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Calls a day the plan includes."
+          },
+          "used": {
+            "type": "integer",
+            "description": "Calls made today."
+          },
+          "credits": {
+            "type": "integer",
+            "description": "Credits left."
+          },
+          "waiting": {
+            "type": "integer",
+            "description": "429: logs already waiting to be read."
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "additionalProperties": true
+      },
+      "Flight": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "asset_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "aircraft": {
+            "type": "string",
+            "description": "The registered aircraft's name, or the name entered for an airframe not on the register."
+          },
+          "asset_name": {
+            "type": "string",
+            "description": "The name entered for an airframe not on the register; blank on a registered aircraft."
+          },
+          "pilot_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "flown_at": {
+            "type": "string",
+            "description": "When it was flown, ISO 8601 with the offset it was entered in."
+          },
+          "duration_s": {
+            "type": "number",
+            "description": "Flight time in seconds."
+          },
+          "site": {
+            "type": "string"
+          },
+          "flight_type": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string",
+            "description": "manual, log, gc (filed by a key) and so on."
+          },
+          "external_ref": {
+            "type": "string",
+            "description": "The sender's own id for the flight, exactly as it was sent."
+          },
+          "reference_conflict": {
+            "type": "boolean",
+            "description": "True when this flight was filed under a reference another member or station had already used, as its own flight."
+          }
+        },
+        "required": [
+          "id",
+          "flown_at",
+          "duration_s"
+        ],
+        "description": "A flight on the organization's record. Further fields (the record's operational details, positions where allowed) are present as the logbook keeps them.",
+        "additionalProperties": true
+      },
+      "Pilot": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "aircrew": {
+            "type": "boolean",
+            "description": "False for somebody with no flight, pilot credential or flying role."
+          },
+          "currency": {
+            "type": "string",
+            "description": "Where the pilot stands: current, due_soon, lapsed, not_on_file (no pilot certificate on file in RotorLab, a record gap and never a lapse), not_met, unknown or not_aircrew. Present for every pilot on a device or admin key, and for the key holder's own row otherwise."
+          },
+          "lapsed": {
+            "type": "array",
+            "description": "The keys of what ran out (cert, recent, night, or the organization's own rule keys). While currency is lapsed and not_on_file is not empty, it also lists cert_not_on_file, so a reader of currency and lapsed alone sees a certificate record gap that a lapse would otherwise hide. cert_not_on_file is a record gap (no pilot certificate on file in RotorLab), not an expiry and not a finding about the pilot; it never means the certificate lapsed. Present with currency.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "not_on_file": {
+            "type": "array",
+            "description": "The keys of the items that read Not on file (usually cert): no pilot certificate on file in RotorLab, a record gap and not a finding about the pilot. Listed whatever currency reads, empty when nothing is missing. Present with currency.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "privilege_terms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "last_flight": {
+            "type": "string",
+            "nullable": true
+          },
+          "hours": {
+            "type": "number",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "role",
+          "aircrew"
+        ],
+        "additionalProperties": true
+      },
+      "Aircraft": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "registration": {
+            "type": "string"
+          },
+          "serial": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "rid_serial": {
+            "type": "string"
+          },
+          "class_marking": {
+            "type": "string"
+          },
+          "class_marking_label": {
+            "type": "string"
+          },
+          "uas_group": {
+            "type": "string",
+            "nullable": true
+          },
+          "mtom_g": {
+            "type": "number",
+            "nullable": true,
+            "description": "Maximum takeoff mass in grams."
+          },
+          "registration_authority": {
+            "type": "string"
+          },
+          "declaration_ref": {
+            "type": "string"
+          },
+          "registration_expires": {
+            "type": "string"
+          },
+          "total_flights": {
+            "type": "integer"
+          },
+          "hours": {
+            "type": "number",
+            "description": "Flight hours on record."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "registration",
+          "serial",
+          "status",
+          "total_flights",
+          "hours"
+        ],
+        "additionalProperties": true
+      },
+      "FlightList": {
+        "type": "object",
+        "properties": {
+          "flights": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Flight"
+            }
+          }
+        },
+        "required": [
+          "flights"
+        ],
+        "description": "Newest flown first.",
+        "additionalProperties": true
+      },
+      "FlightOne": {
+        "type": "object",
+        "properties": {
+          "flight": {
+            "$ref": "#/components/schemas/Flight"
+          },
+          "standing": {
+            "type": "object",
+            "properties": {},
+            "description": "What the records said about the aircraft, the pilot and the authorization on the flight's day.",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "flight"
+        ],
+        "additionalProperties": true
+      },
+      "FlightFiled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "description": "The flight's id."
+          },
+          "external_ref": {
+            "type": "string",
+            "description": "Your reference, exactly as you sent it."
+          },
+          "reference_conflict": {
+            "type": "boolean",
+            "description": "True when another member or station already used this reference: this flight was filed as its own flight, the other flight was not changed, and an admin is asked to review it. False otherwise."
+          },
+          "reference_note": {
+            "type": "string",
+            "description": "One fixed sentence saying so, present only when `reference_conflict` is true."
+          },
+          "flight": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Flight"
+              }
+            ],
+            "nullable": true
+          },
+          "work_raised": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "integer"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "priority": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "standing": {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": true
+          },
+          "possible_duplicates": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "duplicate_note": {
+            "type": "string"
+          },
+          "pilot_named": {
+            "type": "boolean",
+            "description": "False when no pilot was named and none is on record for this reference: the flight is filed, credited to the station, and listed for the organization to name the pilot."
+          },
+          "pilot_note": {
+            "type": "string",
+            "description": "When pilot_named is false, the sentence to show the crew; empty otherwise. Text to show, not to parse."
+          },
+          "pack_note": {
+            "type": "string",
+            "description": "Present only when a pack named on the flight was left off (an unknown serial or id, an entry of the wrong kind, or more than 12 packs): one or more sentences naming what was left off (the first 10 of each kind by name, the rest counted as \"and N more\"). The flight is filed either way. Text to show, not to parse."
+          },
+          "crew_note": {
+            "type": "string",
+            "description": "The crew lines left off the flight and why (a person who is not a member, a malformed id, a duty not on the list); empty when every line was kept. The flight is filed either way. Text to show, not to parse."
+          },
+          "pic_recorded": {
+            "type": "integer",
+            "description": "How many `pic_periods` this call recorded: 0 when none were sent or the flight is on legal hold."
+          },
+          "pic_note": {
+            "type": "string",
+            "description": "The `pic_periods` left off or recorded with no member named, overlapping periods, and an operating basis recorded blank, each in one sentence; empty when there was nothing to say. The flight is filed either way. Text to show, not to parse."
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "voided": {
+            "type": "boolean",
+            "description": "True when the reference names a flight voided since: the void stands and nothing was filed."
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": true
+      },
+      "ChecklistsList": {
+        "type": "object",
+        "properties": {
+          "templates": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "runs": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "templates",
+          "runs"
+        ],
+        "additionalProperties": true
+      },
+      "ChecklistFiled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "run": {
+            "type": "object"
+          },
+          "external_ref": {
+            "type": "string",
+            "description": "Your reference, exactly as you sent it."
+          },
+          "reference_conflict": {
+            "type": "boolean",
+            "description": "True when another member or station already used this reference: this run was filed as its own run, the other run was not changed, and an admin is asked to review it. False otherwise."
+          },
+          "reference_note": {
+            "type": "string",
+            "description": "One fixed sentence saying so, present only when `reference_conflict` is true."
+          }
+        },
+        "required": [
+          "id",
+          "run"
+        ],
+        "additionalProperties": true
+      },
+      "PilotList": {
+        "type": "object",
+        "properties": {
+          "pilots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Pilot"
+            }
+          },
+          "note": {
+            "type": "string",
+            "description": "Currency is information, never a reason to refuse a flight."
+          }
+        },
+        "required": [
+          "pilots"
+        ],
+        "additionalProperties": true
+      },
+      "PicPeriod": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "remote_pic",
+              "at_controls"
+            ],
+            "description": "`remote_pic`: who the crew recorded as remote pilot in command. `at_controls`: the person manipulating the flight controls, when that is somebody else."
+          },
+          "pilot_id": {
+            "type": "integer",
+            "description": "A member's id, the same `id` as `/pilots` and the body's `pilot_id`."
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the period began, ISO 8601 to the second, UTC (Z or an offset). Stored as sent, never moved."
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it ended. Left out, it runs until the next period of the same role, or the landing."
+          },
+          "reason": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Why command changed, in the crew's words. Do not enter health or personal details."
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "The name the station showed, kept only when `pilot_id` names nobody who is a member of this organization."
+          },
+          "sent_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The station's clock when it recorded the change, kept beside the time RotorLab received it."
+          },
+          "sysid": {
+            "type": "string",
+            "maxLength": 32,
+            "description": "The vehicle id the station reported."
+          }
+        },
+        "required": [
+          "role",
+          "from"
+        ]
+      },
+      "SortieSeat": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "remote_pic",
+              "at_controls",
+              "visual_observer",
+              "other"
+            ]
+          },
+          "duty": {
+            "type": "string",
+            "description": "The duty on the organization's list; `role` is `other` for any duty but `pic`, `manip` and `vo`."
+          },
+          "duty_label": {
+            "type": "string"
+          },
+          "controls": {
+            "type": "boolean"
+          },
+          "planned_pic": {
+            "type": "boolean",
+            "description": "On the sortie's pilot seat only: the planned remote pilot in command."
+          },
+          "planned_by": {
+            "type": "string",
+            "description": "On the pilot seat only: who set it."
+          }
+        },
+        "required": [
+          "user_id",
+          "name",
+          "role",
+          "duty",
+          "duty_label",
+          "controls"
+        ],
+        "additionalProperties": true
+      },
+      "Sortie": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "window": {
+            "type": "string",
+            "description": "HH:MM-HH:MM in the organization's time, +1 when it ends the next day; empty for any time on the day."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "out"
+            ]
+          },
+          "asset_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "job_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "job_title": {
+            "type": "string",
+            "description": "The job's title only; empty with no job."
+          },
+          "operating_basis": {
+            "type": "string",
+            "description": "The sortie's operating basis, else the organization's default; empty when neither names one."
+          },
+          "seats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SortieSeat"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "day",
+          "status",
+          "seats"
+        ],
+        "additionalProperties": true
+      },
+      "SortieList": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date"
+          },
+          "sorties": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Sortie"
+            }
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "role": {
+                  "type": "string"
+                },
+                "duty": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "sorties",
+          "roles",
+          "note"
+        ],
+        "additionalProperties": true
+      },
+      "AircraftList": {
+        "type": "object",
+        "properties": {
+          "aircraft": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Aircraft"
+            }
+          }
+        },
+        "required": [
+          "aircraft"
+        ],
+        "description": "The aircraft register.",
+        "additionalProperties": true
+      },
+      "MissionList": {
+        "type": "object",
+        "properties": {
+          "missions": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "missions"
+        ],
+        "description": "Newest first.",
+        "additionalProperties": true
+      },
+      "MissionOne": {
+        "type": "object",
+        "properties": {
+          "mission": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "payload": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "name"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "mission"
+        ],
+        "additionalProperties": true
+      },
+      "MissionPlan": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "owner_id": {
+            "type": "integer",
+            "nullable": true
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "fileType": {
+                "type": "string"
+              },
+              "version": {
+                "type": "integer"
+              },
+              "groundStation": {
+                "type": "string"
+              },
+              "mission": {
+                "type": "object"
+              },
+              "geoFence": {
+                "type": "object"
+              },
+              "rallyPoints": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "fileType",
+              "mission"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "plan"
+        ],
+        "additionalProperties": true
+      },
+      "MissionSaved": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "id"
+        ],
+        "additionalProperties": true
+      },
+      "MissionImported": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "mission": {
+            "type": "object",
+            "properties": {},
+            "description": "The planner payload: send it as `payload` to POST /missions to save it.",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "ok",
+          "mission"
+        ],
+        "additionalProperties": true
+      },
+      "Ok": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ],
+        "additionalProperties": true
+      },
+      "WorkOrderList": {
+        "type": "object",
+        "properties": {
+          "workorders": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "workorders"
+        ],
+        "description": "Work orders, newest first.",
+        "additionalProperties": true
+      },
+      "WorkOrderOne": {
+        "type": "object",
+        "properties": {
+          "workorder": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "title": {
+                "type": "string"
+              },
+              "asset_id": {
+                "type": "integer",
+                "nullable": true
+              },
+              "status": {
+                "type": "string"
+              },
+              "priority": {
+                "type": "string"
+              },
+              "due_by": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "title",
+              "status"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "workorder"
+        ],
+        "additionalProperties": true
+      },
+      "ComponentList": {
+        "type": "object",
+        "properties": {
+          "components": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "components"
+        ],
+        "description": "Fitted and spare components.",
+        "additionalProperties": true
+      },
+      "TypeList": {
+        "type": "object",
+        "properties": {
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "types"
+        ],
+        "description": "Frozen type baselines.",
+        "additionalProperties": true
+      },
+      "TypeOne": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer"
+              },
+              "name": {
+                "type": "string"
+              },
+              "serials": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "bulletins": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                }
+              },
+              "conformity": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "id",
+              "name",
+              "serials",
+              "bulletins"
+            ],
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "additionalProperties": true
+      },
+      "BulletinList": {
+        "type": "object",
+        "properties": {
+          "bulletins": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          }
+        },
+        "required": [
+          "bulletins"
+        ],
+        "description": "Every service bulletin with status.",
+        "additionalProperties": true
+      },
+      "BulletinOne": {
+        "type": "object",
+        "properties": {
+          "bulletin": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "bulletin"
+        ],
+        "additionalProperties": true
+      },
+      "HealthMap": {
+        "type": "object",
+        "properties": {
+          "airworthiness": {
+            "type": "object",
+            "properties": {},
+            "description": "Keyed by aircraft id: {state, readiness, limits, advisory, notes, judged, missing, why, reasons, grounding}. Parse state, never readiness. state is go, limits, advisory, unknown or no_go (names unchanged in 3.4.2), and each reason's level is no_go, unknown, limits or advisory; a reason with limit: true is a limits reason. readiness is the pages' word: No flags, No flags with its notes, Nothing judged, Limits on record, Condition unknown or No go. notes is an integer; judged is a boolean, false where there is no maintenance program and no flights on record (do not count that aircraft as available); missing is a list of type, program and flights.",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "airworthiness"
+        ],
+        "additionalProperties": true
+      },
+      "HealthOne": {
+        "type": "object",
+        "properties": {
+          "asset_id": {
+            "type": "integer"
+          },
+          "flags": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "flights_used": {
+            "type": "integer",
+            "description": "Flights whose logs were read."
+          },
+          "airworthiness": {
+            "type": "object",
+            "description": "One aircraft's reading, as an entry of HealthMap.airworthiness: {state, readiness, limits, advisory, notes, judged, missing, why, reasons}. Parse state, never readiness; read judged before counting a go or advisory aircraft as available (3.4.2)."
+          }
+        },
+        "required": [
+          "asset_id",
+          "flags",
+          "flights_used",
+          "airworthiness"
+        ],
+        "additionalProperties": true
+      },
+      "ScoreList": {
+        "type": "object",
+        "properties": {
+          "scores": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "annotations": {
+            "type": "string",
+            "description": "`off` when the organization turned model annotations off."
+          }
+        },
+        "required": [
+          "scores"
+        ],
+        "additionalProperties": true
+      },
+      "ScoreWritten": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "id"
+        ],
+        "additionalProperties": true
+      },
+      "FlightLogStored": {
+        "type": "object",
+        "properties": {
+          "log": {
+            "type": "object"
+          },
+          "analysis_state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "none",
+              "too_large",
+              "done",
+              "failed"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "log",
+          "analysis_state"
+        ],
+        "additionalProperties": true
+      },
+      "VoidRequested": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "pending": {
+            "type": "boolean"
+          },
+          "request_id": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ok",
+          "pending",
+          "request_id"
+        ],
+        "additionalProperties": true
+      },
+      "Airframes": {
+        "type": "object",
+        "properties": {
+          "airframe_types": {
+            "type": "object",
+            "properties": {},
+            "description": "Every airframe type by name, with its defaults.",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "airframe_types"
+        ],
+        "additionalProperties": true
+      },
+      "Catalog": {
+        "type": "object",
+        "properties": {
+          "catalog": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "catalog"
+        ],
+        "additionalProperties": true
+      },
+      "Job": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "client_ref": {
+            "type": "string"
+          },
+          "client_name": {
+            "type": "string"
+          },
+          "client_po": {
+            "type": "string",
+            "description": "The client's PO or reference"
+          },
+          "job_number": {
+            "type": "string",
+            "description": "Your own job number"
+          },
+          "status": {
+            "type": "string"
+          },
+          "starts": {
+            "type": "string"
+          },
+          "ends": {
+            "type": "string"
+          },
+          "minutes": {
+            "type": "integer",
+            "description": "Flight time on the job"
+          },
+          "billed_through": {
+            "type": "string",
+            "description": "The day billed through, or blank"
+          },
+          "unbilled_minutes": {
+            "type": "integer"
+          }
+        }
+      },
+      "Client": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "JobList": {
+        "type": "object",
+        "properties": {
+          "jobs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Job"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "JobOne": {
+        "type": "object",
+        "properties": {
+          "job": {
+            "$ref": "#/components/schemas/Job"
+          }
+        }
+      },
+      "ClientList": {
+        "type": "object",
+        "properties": {
+          "clients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Client"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "limit": {
+            "type": "integer"
+          },
+          "offset": {
+            "type": "integer"
+          }
+        }
+      },
+      "ClientOne": {
+        "type": "object",
+        "properties": {
+          "client": {
+            "$ref": "#/components/schemas/Client"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,367 @@
+{
+ "info": {
+  "name": "RotorLab API",
+  "_postman_id": "b1d0c0de-0000-4000-8000-rotorlabapi01",
+  "description": "RotorLab key-authenticated HTTP API (/api/v1). Set the collection variables `base_url` (e.g. https://app.rotorlab.app) and `api_key` (your rl_... key from Organization, Integrations, API keys). Auth is applied at the collection level as a Bearer token.",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "auth": {
+  "type": "bearer",
+  "bearer": [
+   {
+    "key": "token",
+    "value": "{{api_key}}",
+    "type": "string"
+   }
+  ]
+ },
+ "variable": [
+  {
+   "key": "base_url",
+   "value": "https://app.rotorlab.app",
+   "type": "string"
+  },
+  {
+   "key": "api_key",
+   "value": "rl_paste_your_key_here",
+   "type": "string"
+  },
+  {
+   "key": "build_id",
+   "value": "1",
+   "type": "string"
+  }
+ ],
+ "item": [
+  {
+   "name": "Meta",
+   "item": [
+    {
+     "name": "Version",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/version",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "version"
+       ]
+      },
+      "description": "Free, unmetered. Returns API name, version, author."
+     }
+    },
+    {
+     "name": "Usage",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/usage",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "usage"
+       ]
+      },
+      "description": "Free, unmetered. Your daily quota, remaining, and credit balance."
+     }
+    }
+   ]
+  },
+  {
+   "name": "Physics",
+   "item": [
+    {
+     "name": "Airframes",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/airframes",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "airframes"
+       ]
+      }
+     }
+    },
+    {
+     "name": "Catalog",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/catalog",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "catalog"
+       ]
+      }
+     }
+    },
+    {
+     "name": "Analyze (multirotor)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"airframe_type\": \"Quad X\",\n  \"motor_count\": 4,\n  \"prop_diameter_in\": 7,\n  \"prop_pitch_in\": 4,\n  \"motor_kv\": 1700\n}"
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/analyze",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "analyze"
+       ]
+      },
+      "description": "Analyze a build. Returns out (headline numbers), charts (SVG), checks, and cg."
+     }
+    },
+    {
+     "name": "Analyze (fixed wing)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"airframe_type\": \"Fixed wing (tractor)\",\n  \"wing_span_mm\": 1800,\n  \"wing_chord_mm\": 220,\n  \"wing_cl_max\": 1.2,\n  \"motor_kv\": 900,\n  \"prop_diameter_in\": 11\n}"
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/analyze",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "analyze"
+       ]
+      },
+      "description": "The same endpoint analyzes a wing: out then carries stall_speed_kmh, cruise_speed_kmh, climb_rate_ms, wing_loading_n_m2."
+     }
+    },
+    {
+     "name": "RF link budget",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"links\": {\n    \"control\": { \"freq_mhz\": 915, \"tx_power_mw\": 250, \"rx_sens_dbm\": -108, \"tx_height_m\": 2, \"rx_height_m\": 100 },\n    \"video\":   { \"freq_mhz\": 5800, \"tx_power_mw\": 1000, \"rx_gain_dbi\": 13, \"rx_sens_dbm\": -90, \"tx_height_m\": 100, \"rx_height_m\": 2 }\n  }\n}"
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/rf",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "rf"
+       ]
+      },
+      "description": "Link budget and range for one link (post its params directly) or several at once under links{}."
+     }
+    },
+    {
+     "name": "Center of gravity",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"airframe_type\": \"Quadplane (lift + pusher)\",\n  \"wing_span_mm\": 1800,\n  \"body_length_mm\": 1000\n}"
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/cg",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "cg"
+       ]
+      },
+      "description": "Center of gravity, balance datum, per-item placements, and %MAC for a winged build."
+     }
+    }
+   ]
+  },
+  {
+   "name": "Builds",
+   "item": [
+    {
+     "name": "List builds",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/builds",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "builds"
+       ]
+      }
+     }
+    },
+    {
+     "name": "Create / overwrite build",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"name\": \"My API build\",\n  \"params\": { \"airframe_type\": \"Quad X\", \"motor_count\": 4 },\n  \"notes\": \"created via API\"\n}"
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/builds",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "builds"
+       ]
+      }
+     }
+    },
+    {
+     "name": "Get build by id",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/builds/{{build_id}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "builds",
+        "{{build_id}}"
+       ]
+      }
+     }
+    },
+    {
+     "name": "Delete build by id",
+     "request": {
+      "method": "DELETE",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/v1/builds/{{build_id}}",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "builds",
+        "{{build_id}}"
+       ]
+      }
+     }
+    }
+   ]
+  },
+  {
+   "name": "Forensics",
+   "description": "Post-incident log analysis. Needs the Crash Analyzer add-on on the account.",
+   "item": [
+    {
+     "name": "Analyze a flight log",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/octet-stream"
+       }
+      ],
+      "description": "Send the log file itself as the body (Postman: Body -> binary -> select file). ArduPilot dataflash (.bin), MAVLink telemetry (.tlog) and PX4 ULog (.ulg) are all accepted; the format is detected from the file contents. Drop ?charts=1 to skip the rendered SVG charts.",
+      "body": {
+       "mode": "file",
+       "file": {
+        "src": ""
+       }
+      },
+      "url": {
+       "raw": "{{base_url}}/api/v1/crash?name=flight.bin&charts=1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "v1",
+        "crash"
+       ],
+       "query": [
+        {
+         "key": "name",
+         "value": "flight.bin"
+        },
+        {
+         "key": "charts",
+         "value": "1"
+        }
+       ]
+      }
+     }
+    }
+   ]
+  }
+ ]
+}

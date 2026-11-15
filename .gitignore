@@ -1,0 +1,22 @@
+# Secrets: never commit a key, credential or webhook secret
+.env
+.env.*
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors and systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Flight logs you test with
+*.bin
+*.tlog
+*.ulg
+*.bbl

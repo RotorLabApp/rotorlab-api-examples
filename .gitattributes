@@ -1,0 +1,4 @@
+* text=auto eol=lf
+# Copies of published files: keep them byte for byte
+openapi/openapi.json -text
+postman/rotorlab.postman_collection.json -text
