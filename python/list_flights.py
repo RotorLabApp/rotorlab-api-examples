@@ -12,6 +12,20 @@ import sys
 
 import _rotorlab as rl
 
+#: A cell starting with one of these is read as a formula by a spreadsheet.
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def safe_cell(value):
+    """A CSV cell that a spreadsheet shows as text, never runs as a formula:
+    a record's site or remarks may be typed by anyone who files a flight."""
+    if value is None:
+        return ""
+    if isinstance(value, str) and value.startswith(FORMULA_START):
+        return "'" + value
+    return value
+
+
 COLUMNS = ("id", "flown_at", "asset_id", "pilot_id", "pilot_name", "duration_s",
            "flight_type", "site", "external_ref")
 
@@ -40,7 +54,7 @@ def main():
         out = csv.writer(sys.stdout)
         out.writerow(COLUMNS)
         for f in rows:
-            out.writerow([f.get(c, "") for c in COLUMNS])
+            out.writerow([safe_cell(f.get(c, "")) for c in COLUMNS])
         return
     for f in rows:
         minutes = float(f.get("duration_s") or 0) / 60.0

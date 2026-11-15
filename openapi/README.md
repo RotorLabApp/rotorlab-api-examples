@@ -1,18 +1,19 @@
 # OpenAPI document
 
-`openapi.json` is RotorLab's published OpenAPI 3.0.3 document, copied byte for byte from
+`openapi.json` is RotorLab's published API description, copied as-is, byte for byte, from the developer page https://rotorlab.app/developers ("Download OpenAPI spec"):
 
     https://app.rotorlab.app/openapi.json
 
-which is the "Download OpenAPI spec" link on https://rotorlab.app/developers. The same document is also served at `https://app.rotorlab.app/api/v1/openapi.json`, with no key needed.
-
 | | |
 |---|---|
-| Fetched | 2026-11-15 |
-| `info.version` in this copy | 3.5.7 |
+| Source | https://app.rotorlab.app/openapi.json (also served at https://app.rotorlab.app/api/v1/openapi.json) |
 | SHA-256 | `e5fecb21153c3dff03d6a0802d16cfef0d503473640ce3d0831dda523956156e` |
+| Matches | RotorLab 3.5.7 (`info.version` in this copy) |
+| Fetched | 2026-11-15 |
 
-Each RotorLab server fills in its own address under `servers` and its own release under `info.version`, so the live document is the reference when it and this copy differ. To check whether this copy is current:
+**License.** This file is not covered by this repository's Apache License 2.0. It is RotorLab, Inc.'s published API description, it remains RotorLab, Inc.'s, and it keeps its own terms. Use it to build against the RotorLab API.
+
+**The live copy is the reference.** Each RotorLab server fills in its own address under `servers` and its own release under `info.version`, so when the live document and this copy differ, use the live one: https://app.rotorlab.app/openapi.json. To check whether this copy is current:
 
 ```bash
 curl -s https://app.rotorlab.app/openapi.json | sha256sum

@@ -16,23 +16,43 @@ with these headers:
     X-RotorLab-Delivery   the delivery's id, the same on every retry
     X-RotorLab-Attempt    1 for the first attempt, then 2, 3 and so on
 
-Verify the signature over the exact bytes received, before parsing them.
+The signature covers the body only, not the headers. So this receiver:
+
+- verifies the signature over the exact bytes received, before parsing them;
+- takes the event name and time from the signed body, never from a header;
+- drops a repeat by the SHA-256 of the body (identical on every retry), not by
+  X-RotorLab-Delivery, which anyone holding one captured delivery could change;
+- ignores a delivery whose signed `at` is older than REPLAY_WINDOW_S;
+- remembers a delivery only once it was handled, and answers 500 when handling
+  failed, so RotorLab tries again;
+- serves each connection on its own thread with a socket timeout, so one slow
+  client cannot hold up the deliveries behind it.
+
 Answer with any 2xx status once you have accepted the event; anything else
-is retried later with the same body, signature and delivery id.
+is retried later with the same body and signature.
 
 RotorLab only delivers to https:// endpoints. Run this behind your own TLS
 terminating proxy or load balancer, which forwards to the port here.
 """
 import argparse
+import calendar
 import collections
 import hashlib
 import hmac
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
+import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MAX_BODY = 1024 * 1024
+#: Longer than RotorLab's retry schedule (about nine hours). Keep body digests
+#: at least this long. If your RotorLab server holds deliveries for longer
+#: (offline mode), widen this to match.
+REPLAY_WINDOW_S = 24 * 3600
+#: Seconds a connection may stall before it is cut off.
+SOCKET_TIMEOUT_S = 15
 
 
 def expected_signature(secret, body):
@@ -43,41 +63,59 @@ def expected_signature(secret, body):
 
 def verify_signature(secret, body, header_value):
     """True when the header matches the body under this secret.
-    Compared in constant time."""
+    Compared in constant time, as bytes, so an odd header cannot raise."""
     if not secret or not header_value:
         return False
-    return hmac.compare_digest(expected_signature(secret, body), header_value.strip())
+    expected = expected_signature(secret, body).encode("ascii")
+    return hmac.compare_digest(expected, header_value.strip().encode("latin-1", "replace"))
+
+
+def too_old(at, now=None):
+    """True when the signed `at` (UTC, "YYYY-MM-DD HH:MM:SS") is outside the
+    replay window, or cannot be read."""
+    try:
+        t = calendar.timegm(time.strptime(at, "%Y-%m-%d %H:%M:%S"))
+    except (TypeError, ValueError):
+        return True
+    return (now if now is not None else time.time()) - t > REPLAY_WINDOW_S
 
 
 class SeenDeliveries(object):
-    """Remembers recent delivery ids so a retry of an event already handled
-    is acknowledged and not acted on twice. In memory only: a real service
-    should keep these in its own database."""
+    """Digests of signed bodies already acted on. The body is identical on
+    every retry and is covered by the signature; X-RotorLab-Delivery is not.
+    In memory only: a real service keeps these in its own database for
+    REPLAY_WINDOW_S."""
 
     def __init__(self, size=10000):
         self._ids = collections.OrderedDict()
         self._size = size
+        self.lock = threading.Lock()
 
-    def first_time(self, delivery_id):
-        if not delivery_id:
-            return True
-        if delivery_id in self._ids:
-            return False
-        self._ids[delivery_id] = True
+    def seen(self, key):
+        return key in self._ids
+
+    def remember(self, key):
+        self._ids[key] = True
         while len(self._ids) > self._size:
             self._ids.popitem(last=False)
-        return True
 
 
 def handle_event(event, at, data):
     """Put your own logic here. Keep it quick, or hand the work to a queue:
-    answer within 10 seconds, or the attempt counts as failed and is retried."""
+    answer within 10 seconds, or the attempt counts as failed and is retried.
+    Raise an exception when the event could not be handled: the receiver then
+    answers 500 and RotorLab sends it again later."""
     print("%s  %s  %s" % (at, event, json.dumps(data, sort_keys=True)))
     sys.stdout.flush()
 
 
-def make_handler(secret, seen):
+def make_handler(secret, seen, handler=None):
+    """The request handler class. `handler` defaults to handle_event."""
+    act = handler or (lambda event, at, data: handle_event(event, at, data))
+
     class Handler(BaseHTTPRequestHandler):
+        timeout = SOCKET_TIMEOUT_S      # a client that stalls mid-request is cut off
+
         def _answer(self, status, text):
             body = (text + "\n").encode("utf-8")
             self.send_response(status)
@@ -98,22 +136,42 @@ def make_handler(secret, seen):
             if not verify_signature(secret, body, self.headers.get("X-RotorLab-Signature")):
                 self._answer(401, "bad signature")
                 return
-            if not seen.first_time(self.headers.get("X-RotorLab-Delivery")):
-                self._answer(200, "already handled")
-                return
             try:
                 payload = json.loads(body.decode("utf-8"))
             except ValueError:
                 self._answer(400, "not JSON")
                 return
-            handle_event(payload.get("event") or self.headers.get("X-RotorLab-Event"),
-                         payload.get("at"), payload.get("data"))
+            if not isinstance(payload, dict) or not payload.get("event"):
+                self._answer(400, "not a RotorLab event")
+                return
+            if too_old(payload.get("at")):
+                self._answer(200, "too old, ignored")      # signed but stale: a replay
+                return
+            key = hashlib.sha256(body).hexdigest()
+            with seen.lock:
+                if seen.seen(key):
+                    self._answer(200, "already handled")
+                    return
+                try:
+                    act(payload["event"], payload.get("at"), payload.get("data"))
+                except Exception:
+                    self._answer(500, "not handled, retry")  # RotorLab tries again
+                    return
+                seen.remember(key)                           # only once it succeeded
             self._answer(200, "ok")
 
         def log_message(self, fmt, *args):
             pass
 
     return Handler
+
+
+def make_server(host, port, secret, seen=None, handler=None):
+    """A threaded server, so one slow connection never blocks another."""
+    server = ThreadingHTTPServer((host, port),
+                                 make_handler(secret, seen or SeenDeliveries(), handler))
+    server.daemon_threads = True
+    return server
 
 
 def main():
@@ -127,7 +185,7 @@ def main():
         sys.stderr.write("Set ROTORLAB_WEBHOOK_SECRET to the secret RotorLab showed "
                          "when you added the webhook.\n")
         sys.exit(2)
-    server = HTTPServer((args.host, args.port), make_handler(secret, SeenDeliveries()))
+    server = make_server(args.host, args.port, secret)
     print("Listening on http://%s:%d/" % (args.host, args.port))
     sys.stdout.flush()
     try:

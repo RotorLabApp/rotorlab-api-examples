@@ -2,7 +2,7 @@
 
 Working examples for the RotorLab API: Python scripts, curl one-liners, a webhook receiver and an MCP setup for AI assistants, plus copies of the published OpenAPI document and Postman collection.
 
-RotorLab is the record system for drone fleets: flights, aircraft, pilots, maintenance and the records an operator keeps. The API is a key-authenticated HTTP interface over the same records and the same performance engine the app uses. Use it to file what your ground stations flew, read your register and your pilots' standing into your own systems, and run builds through the engine from scripts and notebooks.
+RotorLab joins a physics-based build and analysis engine to a drone fleet records platform, and the API reaches both. Run a multirotor, wing or VTOL build through the engine, work out radio link budgets and balance, and send a flight log for forensics after an incident. Then file what your ground stations flew and read your register and your pilots' standing into your own systems. Supported log formats include ArduPilot, PX4, MAVLink, DJI, Parrot, GUTMA, Blackbox and CSV exports, and the format is detected from the file itself; see the developer page for the full list.
 
 RotorLab records, reminds and warns. It never authorizes, approves or clears a flight. A readiness reading or a currency value in an API answer says what your organization's records show; the decision to fly stays with the people and authorities responsible for it.
 
@@ -10,29 +10,67 @@ RotorLab records, reminds and warns. It never authorizes, approves or clears a f
 - Documentation: https://docs.rotorlab.app/
 - Talk to us about an integration: https://rotorlab.app/contact-sales
 
-## Quick start
-
-```bash
-export ROTORLAB_API_KEY="rl_your_key"           # placeholder: paste your own key
-export ROTORLAB_URL="https://app.rotorlab.app"  # the default; change it for your own server
-
-python python/check_key.py           # which server, what the key reaches, today's quota
-python python/list_aircraft.py       # the aircraft register
-python python/aircraft_record.py "Survey 1"
-python python/list_pilots.py         # pilots and where each one's currency stands
-```
-
-The scripts need Python 3.8 or later and nothing outside the standard library.
-
 ## Get an API key
 
 1. Sign in to RotorLab and open **Organization, Integrations, API keys**.
-2. Name the key, tick the areas it needs, choose **read only** or **read and write**, and choose when it ends.
+2. Name the key, tick only the areas it needs (untick the rest), choose **read only** or **read and write**, and choose when it ends.
 3. Click **Create API key**. The key is shown once: copy it somewhere safe. Keys start with `rl_`.
 
 Who may create keys is the organization's choice. By default it is organization admins and roles with Integrations (manage); an admin can open it to every member, or allow no personal keys at all. The organization also sets the longest a key may last, and its admins see and can revoke every key. A person may hold up to 25 active keys: give each integration its own, so revoking one leaves the others working.
 
 A key acts for the person who holds it. It reaches only what that person's role reaches, and the organization's two-factor and single sign-on rules apply to it.
+
+### Keep the key out of history and files
+
+Set `ROTORLAB_API_KEY` by pasting the key at a prompt, not by typing it into a command, so it is not saved in your shell history:
+
+```bash
+read -rs ROTORLAB_API_KEY && export ROTORLAB_API_KEY      # macOS, Linux or Git Bash; paste, then Enter
+```
+
+```powershell
+$env:ROTORLAB_API_KEY = Read-Host "Paste your API key"   # Windows PowerShell
+```
+
+Never write the key into a script, a committed config file or a command line. On a server, load it from your secret store into the environment. If a key may have been exposed, revoke it under Organization, Integrations, API keys and create a new one.
+
+## Quick start: key to first call in five minutes
+
+1. Create a key as above: tick `flights` (read only is enough), choose when it ends, and click **Create API key**. Copy it now: it is shown once.
+2. Set two variables. macOS, Linux or Git Bash:
+
+   ```bash
+   read -rs ROTORLAB_API_KEY && export ROTORLAB_API_KEY    # paste the key, then Enter
+   export ROTORLAB_URL="https://app.rotorlab.app"
+   ```
+
+   Windows PowerShell:
+
+   ```powershell
+   $env:ROTORLAB_API_KEY = Read-Host "Paste your API key"
+   $env:ROTORLAB_URL = "https://app.rotorlab.app"
+   ```
+
+3. Check the key (free, uses no quota):
+
+   ```bash
+   python python/check_key.py
+   ```
+
+   You should see your server, the areas the key reaches and today's quota. A 401 means the key is wrong, revoked or ended.
+4. Read your register (free):
+
+   ```bash
+   python python/list_aircraft.py
+   ```
+
+5. Read one aircraft's record, using a name from step 4:
+
+   ```bash
+   python python/aircraft_record.py "<an aircraft name from step 4>"
+   ```
+
+Records calls are never metered, so nothing here spends a quota or credit. The scripts need Python 3.8 or later and nothing else. The same calls as curl are in [`curl/README.md`](curl/README.md). A readiness reading or a currency value says what your records show; it never authorizes or clears a flight.
 
 ### Areas
 
@@ -47,7 +85,7 @@ Every key carries `status` (version and usage). The other areas are ticked when 
 | `missions` | Saving, importing and deleting mission plans |
 | `jobs` | Clients and jobs (read only) |
 | `mcp` | The MCP endpoint for AI assistants (see [`mcp/`](mcp/)) |
-| `live` | The live telemetry relay |
+| `live` | The live telemetry relay (see the developer page) |
 
 A **read-only** key reads records and runs the engine; it never changes a record.
 
@@ -126,13 +164,13 @@ The MCP endpoint spends no quota or credits; each key may send it 60 requests a 
 |---|---|
 | [`python/`](python/) | Standard-library scripts for the calls above |
 | [`curl/`](curl/) | The same calls as one-liners |
-| [`webhooks/`](webhooks/) | The events RotorLab pushes, the signature scheme, and a receiver that verifies it |
+| [`webhooks/`](webhooks/) | The events RotorLab pushes (available with Fleet Manager; configured in the app, not part of the OpenAPI document), the signature scheme, and a receiver that verifies it |
 | [`mcp/`](mcp/) | Connecting an AI assistant to RotorLab's read-only MCP endpoint |
 | [`openapi/`](openapi/) | The published OpenAPI document, byte for byte |
 | [`postman/`](postman/) | The published Postman collection, byte for byte |
 | [`tests/`](tests/) | Offline checks of the examples |
 
-Every script reads `ROTORLAB_API_KEY` and `ROTORLAB_URL` from the environment, takes `--help`, and takes `--json` to print the raw answer. Keep your key out of source control: put it in an environment variable or a `.env` file, which `.gitignore` already excludes.
+Every script reads `ROTORLAB_API_KEY` and `ROTORLAB_URL` from the environment, takes `--help`, and takes `--json` to print the raw answer. The scripts send the key only over `https://` (plain `http://` only to a server on your own machine) and never follow a redirect, which would carry the key to another address. Keep your key out of source control: set it as shown in "Keep the key out of history and files"; `.gitignore` also excludes `.env` files.
 
 ## Tests
 
@@ -144,6 +182,6 @@ The tests run offline: they check that each example parses as Python 3.8, import
 
 ## License
 
-Apache License 2.0. See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). RotorLab and the RotorLab logo are trademarks of RotorLab, Inc.; the license does not grant rights to them.
+The example code is licensed under the Apache License 2.0; see [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE). `openapi/openapi.json` and `postman/rotorlab.postman_collection.json` are RotorLab, Inc.'s published API description, copied unchanged from https://rotorlab.app/developers; they are not covered by the Apache License and remain RotorLab, Inc.'s. RotorLab and the RotorLab logo are trademarks of RotorLab, Inc.; the license does not grant rights to them.
 
 Security issues: see [`SECURITY.md`](SECURITY.md). Contributions: see [`CONTRIBUTING.md`](CONTRIBUTING.md).

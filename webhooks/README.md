@@ -1,6 +1,8 @@
 # Webhooks
 
-RotorLab can push events to your own systems as they happen, so you do not have to poll. Webhooks are part of Fleet Manager, and an organization admin, or a role with Integrations (manage), adds them in the app under Organization, Integrations, Webhooks.
+Webhooks are configured in the app and are not part of the OpenAPI document; this page is their reference.
+
+RotorLab can push events to your own systems as they happen, so you do not have to poll. Webhooks are available with Fleet Manager, and an organization admin, or a role with Integrations (manage), adds them in the app under Organization, Integrations, Webhooks.
 
 When you add a webhook you give an `https://` endpoint address and pick the events to send. RotorLab then shows the hook's secret **once**. Store it like an API key: it is how your endpoint knows a delivery came from RotorLab. The Webhooks card can also send a test delivery (event `ping`).
 
@@ -38,7 +40,8 @@ X-RotorLab-Attempt: 1
 
 - `at` is the time of the event in UTC.
 - `X-RotorLab-Signature` is `sha256=` followed by the lowercase hex HMAC-SHA256 of the **raw request body**, keyed with the hook's secret (the whole secret string, as RotorLab showed it, encoded as UTF-8).
-- `X-RotorLab-Delivery` is the delivery's id. It is the same on every retry, so use it to drop a repeat you already handled. A test `ping` carries no delivery id.
+- `X-RotorLab-Delivery` is the delivery's id, the same on every retry. The signature covers the body only, not this header, so drop repeats by the body's SHA-256 (the body is identical on every retry) and ignore a delivery whose `at` is older than you keep those digests. A test `ping` carries no delivery id.
+- Take the event name from the signed body, not from the `X-RotorLab-Event` header, which is not signed.
 
 ## Verify the signature
 
@@ -48,14 +51,19 @@ Compute the HMAC over the bytes exactly as received, before you parse or re-seri
 import hashlib, hmac
 
 def verify(secret, raw_body, header_value):
+    if not header_value:
+        return False
     expected = "sha256=" + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header_value or "")
+    # compare bytes: a header with characters outside ASCII must not raise
+    return hmac.compare_digest(expected.encode("ascii"),
+                               header_value.strip().encode("latin-1", "replace"))
 ```
 
-`receiver.py` in this folder is a complete standard-library receiver that does this, drops repeated delivery ids and prints each event:
+`receiver.py` in this folder is a complete standard-library receiver. It verifies the signature, drops a repeat by the SHA-256 of the body, ignores a delivery whose signed `at` is more than 24 hours old (`REPLAY_WINDOW_S`, longer than the retry schedule; widen it if your RotorLab server holds deliveries for longer, as in offline mode), remembers a delivery only after it was handled (answering `500` otherwise, so RotorLab retries), and serves each connection on its own thread with a socket timeout, so one slow client cannot hold up other deliveries. It prints each event:
 
 ```bash
-ROTORLAB_WEBHOOK_SECRET="<the secret RotorLab showed>" python receiver.py --port 8080
+read -rs ROTORLAB_WEBHOOK_SECRET && export ROTORLAB_WEBHOOK_SECRET   # paste the secret, then Enter
+python receiver.py --port 8080
 ```
 
 RotorLab delivers only to `https://` addresses that resolve to the public internet, and never follows a redirect. Run the receiver behind your own TLS terminating proxy or load balancer.

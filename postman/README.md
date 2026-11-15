@@ -1,15 +1,23 @@
 # Postman collection
 
-`rotorlab.postman_collection.json` is RotorLab's published Postman collection (v2.1 format), copied byte for byte from
+`rotorlab.postman_collection.json` is RotorLab's published Postman collection (v2.1 format), part of its published API description, copied as-is, byte for byte, from the developer page https://rotorlab.app/developers ("Download Postman collection"):
 
     https://app.rotorlab.app/rotorlab.postman_collection.json
 
-which is the "Download Postman collection" link on https://rotorlab.app/developers.
-
 | | |
 |---|---|
-| Fetched | 2026-11-15 |
+| Source | https://app.rotorlab.app/rotorlab.postman_collection.json |
 | SHA-256 | `b8ea15b83f5e06193d47d95bc89c02a12dd1fbf913046fef1a1c6d6cdf6240a0` |
+| Matches | RotorLab 3.5.7, the release of the OpenAPI document published beside it |
+| Fetched | 2026-11-15 |
+
+**License.** This file is not covered by this repository's Apache License 2.0. It is RotorLab, Inc.'s published API description, it remains RotorLab, Inc.'s, and it keeps its own terms. Use it to build against the RotorLab API.
+
+**The live copy is the reference:** https://app.rotorlab.app/rotorlab.postman_collection.json. To check whether this copy is current:
+
+```bash
+curl -s https://app.rotorlab.app/rotorlab.postman_collection.json | sha256sum
+```
 
 ## Use it
 

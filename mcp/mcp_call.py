@@ -17,14 +17,32 @@ import json
 import os
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 
 DEFAULT_URL = "https://app.rotorlab.app"
 PROTOCOL = "2025-06-18"
+_LOOPBACK = ("localhost", "127.0.0.1", "::1")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: it would carry the Authorization header to the
+    new address."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def endpoint(url=None):
     root = (url or os.environ.get("ROTORLAB_URL") or DEFAULT_URL).strip().rstrip("/")
+    parts = urllib.parse.urlsplit(root)
+    if parts.scheme != "https" and (parts.hostname or "") not in _LOOPBACK:
+        sys.stderr.write("ROTORLAB_URL must start with https:// (plain http is allowed "
+                         "only for localhost): the key would cross the network in clear.\n")
+        sys.exit(2)
     if root.endswith("/mcp"):
         return root
     return root + "/mcp"
@@ -43,7 +61,7 @@ def rpc(url, key, method, params=None, msg_id=1):
                  "MCP-Protocol-Version": PROTOCOL,
                  "User-Agent": "rotorlab-api-examples/1.0.0"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with _OPENER.open(req, timeout=60) as resp:
             return resp.status, json.loads(resp.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as e:
         text = e.read().decode("utf-8", "replace")

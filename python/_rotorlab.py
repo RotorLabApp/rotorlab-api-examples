@@ -6,8 +6,14 @@ environment variables:
     ROTORLAB_API_KEY   your API key (required)
     ROTORLAB_URL       your RotorLab address (default https://app.rotorlab.app)
 
-The key is read from the environment only, never from the command line, so
-it does not end up in your shell history or a process list.
+The key is read from the environment only, never from a command-line
+argument, so it does not show in a process list. Set the variable without
+typing the key into a command (see the README: `read -rs` in a POSIX shell,
+`Read-Host` in PowerShell), so it does not land in your shell history either.
+
+The key travels only over https:// (plain http:// is allowed for a server on
+this machine only), and a redirect is never followed: following one would
+carry the Authorization header to the new address.
 """
 import json
 import os
@@ -18,6 +24,18 @@ import urllib.request
 
 DEFAULT_URL = "https://app.rotorlab.app"
 USER_AGENT = "rotorlab-api-examples/1.0.0"
+_LOOPBACK = ("localhost", "127.0.0.1", "::1")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect: it would carry the Authorization header to the
+    new address. A 3xx comes back as ApiError with its Location."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 class ApiError(Exception):
@@ -35,6 +53,11 @@ def base_url(override=None):
     """The API root, for example https://app.rotorlab.app/api/v1."""
     root = (override or os.environ.get("ROTORLAB_URL") or DEFAULT_URL).strip()
     root = root.rstrip("/")
+    parts = urllib.parse.urlsplit(root)
+    if parts.scheme != "https" and (parts.hostname or "") not in _LOOPBACK:
+        sys.stderr.write("ROTORLAB_URL must start with https:// (plain http is allowed "
+                         "only for localhost): the key would cross the network in clear.\n")
+        sys.exit(2)
     if root.endswith("/api/v1"):
         root = root[: -len("/api/v1")]
     return root + "/api/v1"
@@ -74,7 +97,7 @@ def request(method, path, key, url=None, params=None, body=None, raw=None,
         headers["Content-Type"] = "application/json"
     req = urllib.request.Request(target, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with _OPENER.open(req, timeout=timeout) as resp:
             text = resp.read().decode("utf-8") or "{}"
             return json.loads(text), dict(resp.headers)
     except urllib.error.HTTPError as e:
@@ -94,7 +117,7 @@ def explain(err):
                   "duplicate_of", "token", "status_url"):
         if field in err.body:
             sys.stderr.write("  %s: %s\n" % (field, err.body[field]))
-    for header in ("Retry-After", "Allow"):
+    for header in ("Retry-After", "Allow", "Location"):
         value = err.headers.get(header)
         if value:
             sys.stderr.write("  %s: %s\n" % (header, value))

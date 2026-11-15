@@ -21,6 +21,13 @@ Thank you for helping improve the RotorLab API examples.
 
 ## Before you open a pull request
 
+Checklist:
+
+- The tests pass (below).
+- No real key, credential or secret anywhere in the change.
+- MCP setup text tells the reader to untick every other area.
+- Key setup never puts a key into a command line, shell history or a committed file.
+
 ```bash
 python -m unittest discover -s tests -v
 ```

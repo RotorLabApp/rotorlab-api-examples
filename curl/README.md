@@ -4,7 +4,13 @@ The same calls as the Python examples, for a shell. Set two variables first:
 
 ```bash
 export ROTORLAB_URL="https://app.rotorlab.app"
-export ROTORLAB_API_KEY="rl_your_key"     # placeholder: paste your own key
+read -rs ROTORLAB_API_KEY && export ROTORLAB_API_KEY     # paste the key, then Enter
+```
+
+Pasting the key at the `read` prompt keeps it out of your shell history. Always use an `https://` address: over plain `http://` the key crosses the network in clear. On a shared machine, note that `-H "Authorization: Bearer $ROTORLAB_API_KEY"` puts the key in curl's command line, which other users can see in a process list; with curl 7.55 or later you can pass the header from standard input instead:
+
+```bash
+printf 'Authorization: Bearer %s' "$ROTORLAB_API_KEY" | curl -s -H @- "$ROTORLAB_URL/api/v1/version"
 ```
 
 Every call sends the key as a bearer token. `X-API-Key: $ROTORLAB_API_KEY` is accepted too.
@@ -65,7 +71,7 @@ Sending the same `external_ref` again from the same key corrects that flight ins
 curl -s -X POST "$ROTORLAB_URL/api/v1/flights/359/log?name=flight.bin" -H "Authorization: Bearer $ROTORLAB_API_KEY" -H "Content-Type: application/octet-stream" --data-binary @flight.bin
 ```
 
-The body is the raw file. Read `analysis_state` in the answer: `queued` is the normal case. A `409` with `duplicate_of` means these bytes are already stored with another flight.
+The body is the raw file. `flight.bin` is an example name: any supported log format works, and the format is detected from the file itself. Read `analysis_state` in the answer: `queued` is the normal case. A `409` with `duplicate_of` means these bytes are already stored with another flight.
 
 ## Analyze a build (area `engine`, metered)
 
