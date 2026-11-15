@@ -178,7 +178,7 @@ Every script reads `ROTORLAB_API_KEY` and `ROTORLAB_URL` from the environment, t
 python -m unittest discover -s tests -v
 ```
 
-The tests run offline: they check that each example parses as Python 3.8, imports nothing outside the standard library, and parses its arguments. They make no network call and need no key.
+The tests run offline: they check that each example parses as Python 3.8, imports nothing outside the standard library, and parses its arguments. They need no key and no RotorLab account; a few start small servers on this computer (127.0.0.1) to test the webhook receiver and the redirect handling.
 
 ## License
 

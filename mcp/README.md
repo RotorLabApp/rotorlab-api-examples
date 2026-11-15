@@ -9,7 +9,7 @@ Point any MCP client that speaks Streamable HTTP (Claude, or your own agent) at 
 ## The key
 
 1. In RotorLab, open Organization, Integrations, API keys.
-2. Untick every area except **AI assistant (MCP) reads**, keep **Read only**, and choose the shortest end date that suits you. The endpoint never writes, and a key with only this area cannot call the rest of the API. A read-only key is enough: the endpoint never writes.
+2. Untick every area except **AI assistant (MCP) reads**, keep **Read only**, and choose the shortest end date that suits you. The endpoint never writes, and a key with only this area cannot call the rest of the API.
 3. Copy the key when it is shown. It is shown once.
 
 Send it as `Authorization: Bearer <key>`. The key's organization is the boundary for every read. A member's key sees only the tools their role reads, and two-factor and single sign-on rules apply to the key as they do to signing in.
