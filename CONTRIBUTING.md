@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for helping improve the RotorLab API examples.
+Thank you for helping improve the RotorLab API examples. Everyone taking part follows our [Code of Conduct](CODE_OF_CONDUCT.md). Questions are welcome as issues, with the question template.
 
 ## What fits here
 

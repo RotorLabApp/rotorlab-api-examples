@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security problem
+    url: https://github.com/RotorLabApp/rotorlab-api-examples/security/policy
+    about: Report it privately, by email to security@rotorlab.app or GitHub private vulnerability reporting. Never in a public issue.
+  - name: RotorLab developer page
+    url: https://rotorlab.app/developers
+    about: The API reference, the OpenAPI document and the Postman collection.
+  - name: Contact RotorLab
+    url: https://rotorlab.app/contact
+    about: Questions about your RotorLab account or organization.

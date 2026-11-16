@@ -6,6 +6,14 @@ RotorLab can push events to your own systems as they happen, so you do not have 
 
 When you add a webhook you give an `https://` endpoint address and pick the events to send. RotorLab then shows the hook's secret **once**. Store it like an API key: it is how your endpoint knows a delivery came from RotorLab. The Webhooks card can also send a test delivery (event `ping`).
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../docs/images/webhooks-dark.png">
+    <img src="../docs/images/webhooks-light.png" width="820" alt="The Webhooks card under Organization, Integrations, Webhooks: one hook to https://example.com/hooks/rotorlab sending four events (flight.filed, flight.voided, workorder.raised, defect.reported) with Test and Delete buttons, the endpoint address field and Add webhook button, the event checkboxes, the retry schedule, and the signing secret shown once, masked here.">
+  </picture>
+  <br><sub>A webhook right after it was added, with its signing secret shown once (masked here). Fictional demo organization.</sub>
+</p>
+
 ## Events
 
 | Event | When | `data` carries |

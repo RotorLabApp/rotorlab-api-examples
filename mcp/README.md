@@ -12,6 +12,16 @@ Point any MCP client that speaks Streamable HTTP (Claude, or your own agent) at 
 2. Untick every area except **AI assistant (MCP) reads**, keep **Read only**, and choose the shortest end date that suits you. The endpoint never writes, and a key with only this area cannot call the rest of the API.
 3. Copy the key when it is shown. It is shown once.
 
+The developer page describes the endpoint, its transport and its limits, with a curl call you can run once the key is set:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../docs/images/mcp-setup-dark.png">
+    <img src="../docs/images/mcp-setup-light.png" width="820" alt="The MCP section of the RotorLab developer page: the read-only endpoint POST https://app.rotorlab.app/mcp, the AI assistant (MCP) reads key area, a curl example calling the recent_flights tool, and notes on transport, tools, times, paging, errors and limits.">
+  </picture>
+  <br><sub>The MCP section of https://rotorlab.app/developers.</sub>
+</p>
+
 Send it as `Authorization: Bearer <key>`. The key's organization is the boundary for every read. A member's key sees only the tools their role reads, and two-factor and single sign-on rules apply to the key as they do to signing in.
 
 ## Claude Code
