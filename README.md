@@ -260,7 +260,8 @@ $ python mcp_call.py call recent_flights --args '{"limit": 2}'
 The webhook receiver. A small test script on the same computer, standing in for RotorLab, sent it one correctly signed delivery, the same body again under another delivery id, and a delivery with a wrong signature. The secret is a throwaway test value.
 
 ```console
-$ ROTORLAB_WEBHOOK_SECRET=whsec_demo_only_not_a_real_secret python webhooks/receiver.py --port 8090
+$ read -rs ROTORLAB_WEBHOOK_SECRET && export ROTORLAB_WEBHOOK_SECRET   # paste the secret; it is not echoed or kept in history
+$ python webhooks/receiver.py --port 8090
 Listening on http://127.0.0.1:8090/
 2026-11-16 00:02:26  workorder.raised  {"asset_id": 1, "order_id": 88, "origin": "manual", "priority": "routine", "title": "Replace motor 3"}
 ```
